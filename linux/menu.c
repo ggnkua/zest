@@ -96,6 +96,7 @@ static const int file_selector_filename_lines=FSEL_YCHARS-2;
 static FILE_SELECTOR_STATE file_selector_state[FILE_SELECTOR_VIEWS];
 static FILE_SELECTOR_STATE *current_view;
 int view;
+int selected_ram_size=0;
 
 static int buttonclick_warm_reset(ZuiWidget* obj)
 {
@@ -104,6 +105,7 @@ static int buttonclick_warm_reset(ZuiWidget* obj)
 }
 
 static int buttonclick_cold_reset(ZuiWidget* obj) {
+  config.mem_size = selected_ram_size;
   cold_reset();
   return UI_CLOSE_FORM;
 }
@@ -476,7 +478,6 @@ static int buttonclick_extended_modes(ZuiWidget* obj) {
   return UI_KEEP_FORM_OPEN;
 }
 
-int selected_ram_size=0;
 static int handle_ram_change(int value)
 {
   if (selected_ram_size == value)  
