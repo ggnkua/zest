@@ -44,6 +44,9 @@ void * thread_ikbd(void * arg);
 /* from infomsg.c */
 void * thread_infomsg(void * arg);
 
+/* from menu.c */
+void * thread_jukebox(void * arg);
+
 #define ST_MEM_ADDR 0x10000000
 #define ST_MEM_SIZE 0x1000000
 
@@ -311,6 +314,8 @@ int main(int argc, char **argv) {
   pthread_create(&floppy_thr,NULL,thread_floppy,NULL);
   pthread_t infomsg_thr;
   pthread_create(&infomsg_thr,NULL,thread_infomsg,NULL);
+  pthread_t jukebox_thr;
+  pthread_create(&jukebox_thr,NULL,thread_jukebox,NULL);
 
   struct sigaction sa = {0};
   sa.sa_handler = signal_handler;

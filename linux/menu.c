@@ -26,6 +26,7 @@
 extern int tolower (int __c);
 #include <unistd.h>
 #include <limits.h> // for PATH_MAX
+#include <stdlib.h> // for rand/srand
 
 #include "menu.h"
 #include "zui.h"
@@ -34,6 +35,15 @@ extern int tolower (int __c);
 #include "config.h"
 #include "floppy.h"
 #include "hdd.h"
+
+enum {
+  FILE_SELECTOR_DISK_A,
+  FILE_SELECTOR_DISK_B,
+  FILE_SELECTOR_TOS_IMAGE,
+  FILE_SELECTOR_HDD_IMAGE,
+  FILE_SELECTOR_JUKEBOX_PATH,
+  FILE_SELECTOR_VIEWS_COUNT, // Always place this last!
+};
 
 typedef struct _file_selector_state {
   int total_listing_files;
@@ -44,19 +54,17 @@ typedef struct _file_selector_state {
 } FILE_SELECTOR_STATE;
 
 enum {
-  FILE_SELECTOR_DISK_A,
-  FILE_SELECTOR_DISK_B,
-  FILE_SELECTOR_TOS_IMAGE,
-  FILE_SELECTOR_HDD_IMAGE,
-  FILE_SELECTOR_VIEWS, // Always place this last!
-};
-
-enum {
   UI_CLICK,
   UI_CLOSE_FORM,
   UI_OPEN_FILE_SELECTOR,
   UI_KEEP_FORM_OPEN     = 99,
 };
+
+typedef struct _jukebox_state {
+  int enabled;
+  uint64_t timeout;
+  uint64_t timeout_duration;
+} JUKEBOX_STATE;
 
 // Stuff that would be nice for the UI lib:
 // - Changable text widgets (example: file selector text widgets that display the files)
@@ -75,8 +83,6 @@ enum {
 // - Vertical (scroll) bar between ^ and v buttons
 // - <@tInBot> and a history of last images comes to mind (does not need to be saved neccessarily)
 
-// - At the moment zeST does not have support for two floppies.
-
 #define XCHARS 60
 #define YCHARS 20   // XCHARS*YCHARS must not exceed 1624
 #define XPOS (config.mono?80:180)
@@ -92,12 +98,26 @@ enum {
 #error Too many characters (XCHARS*YCHARS)
 #endif
 
+// Menu / UI
 int menu_active=0;
+int selected_ram_size=0;
 
+// Jukebox
+extern uint64_t gettime(void);
+extern void infomsg_display(const char* msg);
+static JUKEBOX_STATE jukebox={0,0,90*1000000};
+extern volatile int thr_end;
+
+// File selector state - TODO place everything into a struct
+static char file_selector_list[FSEL_YCHARS-2][FSEL_XCHARS];
+static glob_t glob_info;
+static char *directory_filenames[1024];  // Holds pointers to filtered directory items inside the glob struct
+static char blank_line[FSEL_XCHARS]="                                       "; // TODO: this should idealy be resized depending on FSEL_XCHARS
+static int file_selector_view;
+static int file_selector_running=0;
 static const int file_selector_filename_lines=FSEL_YCHARS-2;
-static FILE_SELECTOR_STATE file_selector_state[FILE_SELECTOR_VIEWS];
-static FILE_SELECTOR_STATE *current_view;
-int view;
+FILE_SELECTOR_STATE file_selector_state[FILE_SELECTOR_VIEWS_COUNT];
+FILE_SELECTOR_STATE *current_view;
 
 static int buttonclick_warm_reset(ZuiWidget* obj)
 {
@@ -106,15 +126,10 @@ static int buttonclick_warm_reset(ZuiWidget* obj)
 }
 
 static int buttonclick_cold_reset(ZuiWidget* obj) {
+  config.mem_size=selected_ram_size;
   cold_reset();
   return UI_CLOSE_FORM;
 }
-
-// File selector state
-char file_selector_list[FSEL_YCHARS-2][FSEL_XCHARS];
-glob_t glob_info;
-char *directory_filenames[1024];  // Holds pointers to filtered directory items inside the glob struct
-char blank_line[FSEL_XCHARS]="                                       "; // TODO: this should idealy be resized depending on FSEL_XCHARS
 
 void populate_file_array()
 {
@@ -246,17 +261,17 @@ void read_directory(char *path) {
         *p_extension++=tolower(*p_three_chars++);
       }
       // TODO: this is terrible!
-      if (view==FILE_SELECTOR_DISK_A||view==FILE_SELECTOR_DISK_B) {
+      if (file_selector_view==FILE_SELECTOR_DISK_A||file_selector_view==FILE_SELECTOR_DISK_B||file_selector_view==FILE_SELECTOR_JUKEBOX_PATH) {
         if (strcmp(extension, "msa")==0||strcmp(extension, ".st")==0||strcmp(extension, "mfm")==0) {
           directory_filenames[current_view->total_listing_files]=*current_glob + pathname_bytes_to_skip;
           current_view->total_listing_files++;
         }
-      } else if (view==FILE_SELECTOR_TOS_IMAGE) {
+      } else if (file_selector_view==FILE_SELECTOR_TOS_IMAGE) {
         if (strcmp(extension, "img")==0||strcmp(extension, "rom")==0) {
           directory_filenames[current_view->total_listing_files]=*current_glob + pathname_bytes_to_skip;
           current_view->total_listing_files++;
         }
-      } else if (view==FILE_SELECTOR_HDD_IMAGE) {
+      } else if (file_selector_view==FILE_SELECTOR_HDD_IMAGE) {
         if (strcmp(extension, "img")==0||strcmp(extension, "ahd")==0) {
           directory_filenames[current_view->total_listing_files]=*current_glob + pathname_bytes_to_skip;
           current_view->total_listing_files++;
@@ -313,14 +328,14 @@ static int buttonclick_fsel_ok(ZuiWidget* obj) {
     update_file_selector_when_entering_new_directory();
     return 0;   // Don't exit the dialog yet
   }
-  if (view==FILE_SELECTOR_DISK_A||view==FILE_SELECTOR_DISK_B) {
-    int drive = view==FILE_SELECTOR_DISK_B;
+  if (file_selector_view==FILE_SELECTOR_DISK_A||file_selector_view==FILE_SELECTOR_DISK_B) {
+    int drive = file_selector_view==FILE_SELECTOR_DISK_B;
     strcpy(current_view->selected_file,selected_item-strlen(current_view->current_directory));
     change_floppy(selected_item-strlen(current_view->current_directory),drive);
-  } else if (view==FILE_SELECTOR_TOS_IMAGE) {
+  } else if (file_selector_view==FILE_SELECTOR_TOS_IMAGE) {
     load_rom(selected_item);
     cold_reset();
-  } else if (view==FILE_SELECTOR_HDD_IMAGE) {
+  } else if (file_selector_view==FILE_SELECTOR_HDD_IMAGE) {
     strcpy(current_view->selected_file,selected_item-strlen(current_view->current_directory));
     hdd_changeimg(selected_item);
     cold_reset();
@@ -347,24 +362,29 @@ static int buttonclick_eject_floppy_b(ZuiWidget* obj) {
 }
 
 ZuiWidget * menu_file_selector() {
+  file_selector_running=1;  // Signal to other threads (jukebox) that file selector is running
   ZuiWidget * form=zui_panel(0, 0, FSEL_XCHARS, FSEL_YCHARS);
-  if (view==FILE_SELECTOR_DISK_A) {
+  if (file_selector_view==FILE_SELECTOR_DISK_A) {
     zui_add_child(form, zui_text(0, 0, "\x5    Select a disk image for drive A   \x7"));
-  } else if (view==FILE_SELECTOR_DISK_B) {
+  } else if (file_selector_view==FILE_SELECTOR_DISK_B) {
     zui_add_child(form, zui_text(0, 0, "\x5    Select a disk image for drive B   \x7"));
-  } else if (view==FILE_SELECTOR_TOS_IMAGE) {
+  } else if (file_selector_view==FILE_SELECTOR_TOS_IMAGE) {
     zui_add_child(form, zui_text(0, 0, "\x5          Select a TOS image          \x7"));
-  } else if (view==FILE_SELECTOR_HDD_IMAGE) {
+  } else if (file_selector_view==FILE_SELECTOR_HDD_IMAGE) {
     zui_add_child(form, zui_text(0, 0, "\x5       Select a hard disk image       \x7"));
+  } else if (file_selector_view==FILE_SELECTOR_JUKEBOX_PATH) {
+    zui_add_child(form, zui_text(0, 0, "\x5    Select a path for jukebox mode    \x7"));
   }
   zui_add_child(form,zui_text(FSEL_XCHARS-1,FSEL_YCHARS-1,"\x6"));                               // "window resize" glyph on ST font
   zui_add_child(form,zui_button(FSEL_XCHARS-1,1,"\x1",buttonclick_fsel_up_arrow));               // up arrow glyph on ST font
   zui_add_child(form,zui_button(FSEL_XCHARS-1,FSEL_YCHARS-2,"\x2",buttonclick_fsel_down_arrow)); // down arrow on ST font
   zui_add_child(form,zui_button(1,FSEL_YCHARS-1,"Dir up",buttonclick_fsel_dir_up));
-  if (view==FILE_SELECTOR_DISK_A||view==FILE_SELECTOR_DISK_B) {
+  if (file_selector_view==FILE_SELECTOR_DISK_A||file_selector_view==FILE_SELECTOR_DISK_B||file_selector_view==FILE_SELECTOR_JUKEBOX_PATH) {
     zui_add_child(form, zui_button(8, FSEL_YCHARS-1, "Ok", buttonclick_fsel_ok));
   }
-  zui_add_child(form,zui_button(11,FSEL_YCHARS-1,"Ok (reset)",buttonclick_fsel_ok_reset));
+  if (file_selector_view!=FILE_SELECTOR_JUKEBOX_PATH) {
+    zui_add_child(form,zui_button(11,FSEL_YCHARS-1,"Ok (reset)",buttonclick_fsel_ok_reset));
+  }
   zui_add_child(form,zui_button(22,FSEL_YCHARS-1,"Cancel",buttonclick_fsel_cancel));
   int i;
   populate_file_array();
@@ -375,6 +395,7 @@ ZuiWidget * menu_file_selector() {
     }
     zui_add_child(form,zui_text_ext(0,i+1,file_selector_list[i],c,0));
   }
+  file_selector_running=0;  // Signal to other threads (jukebox) that file selector is done
   return form;
 }
 
@@ -424,26 +445,32 @@ static void setup_item_selector(int selector_view) {
 }
 
 static int buttonclick_insert_floppy_a(ZuiWidget* obj) {
-  view=FILE_SELECTOR_DISK_A;
+  file_selector_view=FILE_SELECTOR_DISK_A;
   setup_item_selector(FILE_SELECTOR_DISK_A);
   return UI_OPEN_FILE_SELECTOR;
 }
 
 static int buttonclick_insert_floppy_b(ZuiWidget* obj) {
-  view=FILE_SELECTOR_DISK_B;
+  file_selector_view=FILE_SELECTOR_DISK_B;
   setup_item_selector(FILE_SELECTOR_DISK_B);
   return UI_OPEN_FILE_SELECTOR;
 }
 
 static int buttonclick_select_tos(ZuiWidget* obj) {
-  view=FILE_SELECTOR_TOS_IMAGE;
+  file_selector_view=FILE_SELECTOR_TOS_IMAGE;
   setup_item_selector(FILE_SELECTOR_TOS_IMAGE);
   return UI_OPEN_FILE_SELECTOR;
 }
 
 static int buttonclick_select_hdd(ZuiWidget* obj) {
-  view=FILE_SELECTOR_HDD_IMAGE;
+  file_selector_view=FILE_SELECTOR_HDD_IMAGE;
   setup_item_selector(FILE_SELECTOR_HDD_IMAGE);
+  return UI_OPEN_FILE_SELECTOR;
+}
+
+static int buttonclick_select_jukebox_path(ZuiWidget* obj) {
+  file_selector_view=FILE_SELECTOR_JUKEBOX_PATH;
+  setup_item_selector(FILE_SELECTOR_JUKEBOX_PATH);
   return UI_OPEN_FILE_SELECTOR;
 }
 
@@ -477,17 +504,29 @@ static int buttonclick_extended_modes(ZuiWidget* obj) {
   return UI_KEEP_FORM_OPEN;
 }
 
+static int buttonclick_jukebox_toggle(ZuiWidget* obj) {
+  jukebox.enabled^=1;
+  if (jukebox.enabled) {
+    if (file_selector_state[FILE_SELECTOR_JUKEBOX_PATH].current_directory==0) {
+      jukebox.enabled=0; // Empty directory causes a segfault
+      return UI_CLOSE_FORM;
+    }
+    jukebox.timeout=gettime();
+  }
+  return UI_CLOSE_FORM;
+}
+
 static int handle_ram_change(int value)
 {
-  if (config.mem_size != value) {
+  if (config.mem_size!= value) {
     // User clicked on RAM size that's different that what's running,
     // so we assume they want a memory re-config. Change RAM size and force cold boot.
-    config.mem_size = value;
+    selected_ram_size=value;
+    config.mem_size=value;
     cold_reset();
     return UI_CLOSE_FORM;
-  } else {
-    return UI_KEEP_FORM_OPEN;
   }
+  return UI_KEEP_FORM_OPEN;
 }
 
 static int buttonclick_change_ram_size_0(ZuiWidget* obj) { return handle_ram_change(0); }
@@ -543,7 +582,12 @@ ZuiWidget * menu_form(void) {
 
   int bg_extended=config.extended_video_modes*2+1;
   zui_add_child(form,zui_button_ext(1,11,"Extended video modes",buttonclick_extended_modes,0,bg_extended,2,3));
-  zui_add_child(form,zui_button(1,13,"Exit menu",buttonclick_exit_menu));
+
+  int bg_jukebox=jukebox.enabled*2+1;
+  zui_add_child(form,zui_button_ext(1,13,"Jukebox mode",buttonclick_jukebox_toggle,0,bg_jukebox,2,3));
+  zui_add_child(form,zui_button(1,14,"Select jukebox image directory",buttonclick_select_jukebox_path));
+
+  zui_add_child(form,zui_button(1,17,"Exit menu",buttonclick_exit_menu));
   return form;
 }
 
@@ -595,6 +639,7 @@ void menu_init(void) {
   setup_file_selector(config.floppy_a,FILE_SELECTOR_DISK_A);
   setup_file_selector(config.floppy_b,FILE_SELECTOR_DISK_B);
   setup_file_selector(config.hdd_image,FILE_SELECTOR_HDD_IMAGE);
+  selected_ram_size=config.mem_size;
 }
 
 static uint8_t gradient[MAX_SCANLINES][3];
@@ -659,4 +704,37 @@ void menu(void) {
     zui_free(form);
   }
   menu_active=0;
+}
+
+void * thread_jukebox(void * arg) {
+  while (thr_end == 0) {
+    uint64_t time = gettime();
+    usleep(1000);
+    if (jukebox.enabled && !file_selector_running) {
+      if (time >= jukebox.timeout)
+      {
+        // Read directory
+        file_selector_view = FILE_SELECTOR_JUKEBOX_PATH;
+        read_directory(file_selector_state[FILE_SELECTOR_JUKEBOX_PATH].current_directory);
+        // Select random image
+        srand(time);
+        char *selected_item;
+        do {
+          int selected_image = rand() % current_view->total_listing_files;
+          selected_item = directory_filenames[selected_image];
+        } while (selected_item[strlen(selected_item)-1] == '/'); // Avoid directories
+        // Construct image filename
+        char new_disk_image_name[PATH_MAX];
+        strcpy(new_disk_image_name, file_selector_state[FILE_SELECTOR_JUKEBOX_PATH].current_directory);
+        strcat(new_disk_image_name, selected_item);
+        // Boot the image and set timeout
+        change_floppy(new_disk_image_name, FILE_SELECTOR_DISK_A);
+        config.mem_size = selected_ram_size;
+        cold_reset();
+        jukebox.timeout = jukebox.timeout_duration + gettime();
+        infomsg_display(new_disk_image_name);
+      }
+    }
+  }
+  return NULL;
 }

@@ -46,7 +46,8 @@ void * thread_infomsg(void * arg) {
 
   while (thr_end==0) {
     usleep(1000);
-    if (msg_on && gettime()>=msg_timeout) {
+    uint64_t time=gettime();
+    if (msg_on && time>=msg_timeout) {
       infomsg_hide();
     }
   }
