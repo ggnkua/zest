@@ -101,8 +101,11 @@ static int handler(void* user, const char* section, const char* name, const char
     if (value) pconfig->hdd_image = strdup(value);
   } else if (MATCH("keyboard","right_alt_is_altgr")) {
     if (value) pconfig->right_alt_is_altgr = truefalse(value);
-  }
-  else {
+  } else if (MATCH("jukebox", "path")) {
+    if (value) pconfig->jukebox_dir = strdup(value);
+  } else if (MATCH("jukebox", "timeout")) {
+    if (value) pconfig->jukebox_timeout = strtoull(value,NULL,10);
+  } else {
     return 0;  /* unknown section/name, error */
   }
   return 1;
@@ -122,6 +125,8 @@ void config_load(const char *filename) {
   config.floppy_b_write_protect = 0;
   config.hdd_image = NULL;
   config.right_alt_is_altgr = 0;
+  config.jukebox_dir = NULL;
+  config.jukebox_timeout = 90 * 1000000;
 
   if (ini_parse(filename,handler,&config) < 0) {
     printf("Can't load `%s`\n",filename);

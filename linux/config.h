@@ -19,6 +19,7 @@
 #ifndef __CONFIG_H__
 #define __CONFIG_H__
 
+#include <stdint.h>
 
 enum cfg_mem_size {
   CFG_256K = 0,
@@ -47,6 +48,8 @@ typedef struct {
   int floppy_a_write_protect;       // A: write protect (1:on, 0:off)
   const char *floppy_b;             // B: floppy image file, full path
   int floppy_b_write_protect;       // B: write protect (1:on, 0:off)
+  const char *jukebox_dir;          // Default jukebox directory
+  uint64_t jukebox_timeout;         // Jukebox mode disk update frequency (in microseconds)
 
   // hard disk
   const char *hdd_image;            // Hard disk image

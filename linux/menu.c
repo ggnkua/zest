@@ -639,6 +639,7 @@ void menu_init(void) {
   setup_file_selector(config.floppy_a,FILE_SELECTOR_DISK_A);
   setup_file_selector(config.floppy_b,FILE_SELECTOR_DISK_B);
   setup_file_selector(config.hdd_image,FILE_SELECTOR_HDD_IMAGE);
+  strcpy(file_selector_state[FILE_SELECTOR_JUKEBOX_PATH].current_directory,config.jukebox_dir);
   selected_ram_size=config.mem_size;
 }
 
