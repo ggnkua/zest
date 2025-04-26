@@ -271,7 +271,7 @@ begin
 		in_reg8_11 => in_reg8_11
 	);
 
-	osd: entity on_screen_display port map (
+	osd1: entity on_screen_display port map (
 		clk => clk,
 		resetn => resetn,
 		bridge_addr => dev_addr,
@@ -350,7 +350,7 @@ begin
 		rom_r_d => rom_r_d
 	);
 
-	fdd:entity floppy_drive port map (
+	fdd1:entity floppy_drive port map (
 		clk => clk,
 		clken => clken,
 		resetn => soft_resetn,
@@ -409,7 +409,7 @@ begin
 	ikbd_j0 <= out_reg7(26 downto 22);
 	ikbd_j1 <= out_reg7(31 downto 27);
 	ikbd_k <= out_reg6 & out_reg5 & out_reg4;
-	ikbd:entity atari_ikbd port map (
+	ikbd1:entity atari_ikbd port map (
 		clk => ikbd_clk,
 		clkren => ikbd_clkren,
 		clkfen => ikbd_clkfen,

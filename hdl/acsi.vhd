@@ -94,7 +94,7 @@ architecture rtl of acsi_drive is
 	signal wrreg		: std_logic_vector(23 downto 0);
 
 begin
-	ram : entity ram_tdp generic map (
+	ram1 : entity ram_tdp generic map (
 			DATA_WIDTH => 32,
 			ADDR_WIDTH => 9
 		)

@@ -411,12 +411,10 @@ begin
         TxD   <= TxDat;
         TxIE  <= '0';
         RTS_n <= '1';
-      when "11" =>                      -- Disable Tx interrupts, Assert RTS, send break
+      when others =>                    -- Disable Tx interrupts, Assert RTS, send break
         TxD   <= '0';
         TxIE  <= '0';
         RTS_n <= '0';
-      when others =>
-        null;
     end case;
 
     RxIE  <= CtrlReg(7);

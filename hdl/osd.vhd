@@ -111,7 +111,7 @@ begin
 	ram_din2 <= (others => '0');
 	ram_wsb2 <= (others => '0');
 	ram_we2 <= '0';
-	ram: entity ram_tdp
+	ram1: entity ram_tdp
 		generic map (
 			DATA_WIDTH => 2**DATA_WIDTH_BITS,
 			ADDR_WIDTH => (ADDR_MSB-ADDR_LSB+1)

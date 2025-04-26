@@ -551,7 +551,7 @@ begin
 		rgb => rgb
 	);
 
-	mfp:entity mc68901 port map (
+	mfp1:entity mc68901 port map (
 		clk => clk,
 		clkren => en4rck,
 		clkfen => en4fck,
@@ -592,7 +592,7 @@ begin
 	mfp_rc <= '0';
 	mfp_tc <= '0';
 
-	acia_ikbd:entity acia6850 port map (
+	acia_ikbd1:entity acia6850 port map (
 		clk => clk,
 		rst => reset,
 		cs => acia_ikbd_cs,
@@ -615,7 +615,7 @@ begin
 	acia_ikbd_dcd_n <= '0';
 	acia_ikbd_cts_n <= '0';
 
-	acia_midi:entity acia6850 port map (
+	acia_midi1:entity acia6850 port map (
 		clk => clk,
 		rst => reset,
 		cs => acia_midi_cs,
@@ -638,7 +638,7 @@ begin
 	acia_midi_cts_n <= '0';
 	acia_irq <= acia_ikbd_irq nor acia_midi_irq;
 
-	dma:entity dma_controller port map (
+	dma1:entity dma_controller port map (
 		clk => clk,
 		cken => en8rck,
 		resetn => resetn,
@@ -667,7 +667,7 @@ begin
 	dma_a1 <= dma_CA(0);
 	dma_wd <= dma_oCD;
 
-	fdc:entity wd1772 port map (
+	fdc1:entity wd1772 port map (
 		clk => clk,
 		clken => en8rck,
 		resetn => resetn,
@@ -699,7 +699,7 @@ begin
 	psg_bc2 <= '1';
 	psg_ia <= (others => '0');
 	psg_ib <= (others => '0');
-	psg:entity ym2149 port map (
+	psg1:entity ym2149 port map (
 		clk => clk,
 		aclken => en2rck,
 		resetn => resetn,
