@@ -55,6 +55,7 @@ architecture behavioral of shifter is
 	signal rr		: pxregs_t;
 	signal ir		: pxregs_t;
 	signal idff		: std_logic_vector(15 downto 0);
+	signal pixel0	: std_logic_vector(3 downto 0);
 	signal pixel	: std_logic_vector(3 downto 0);
 	signal load1	: std_logic;
 	signal sde		: std_logic;
@@ -65,6 +66,9 @@ architecture behavioral of shifter is
 	signal reload1	: std_logic;
 	signal pxcnt	: unsigned(3 downto 0);
 	signal loadsr	: std_logic_vector(3 downto 0);
+	-- pixel output shift register
+	type pxsr_t is array (0 to 2) of std_logic_vector(3 downto 0);
+	signal pxsr		: pxsr_t;
 
 begin
 	address <= to_integer(unsigned(A));
@@ -125,14 +129,25 @@ process(rr,res)
 begin
 	case res is
 	when "00" =>
-		pixel <= rr(3)(15) & rr(2)(15) & rr(1)(15) & rr(0)(15);
+		pixel0 <= rr(3)(15) & rr(2)(15) & rr(1)(15) & rr(0)(15);
 	when "01" =>
-		pixel <= "00" & rr(1)(15) & rr(0)(15);
+		pixel0 <= "00" & rr(1)(15) & rr(0)(15);
 	when "10" =>
-		pixel <= "000" & rr(0)(15);
+		pixel0 <= "000" & rr(0)(15);
 	when others =>
-		pixel <= "0000";
+		pixel0 <= "0000";
 	end case;
+end process;
+pixel <= pxsr(0);
+
+-- pixel shift register
+process(clk)
+begin
+	if rising_edge(clk) then
+		if enpxck = '1' then
+			pxsr <= pxsr(1 to pxsr'high) & pixel0;
+		end if;
+	end if;
 end process;
 
 -- reload
