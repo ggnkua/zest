@@ -72,6 +72,8 @@ static int handler(void* user, const char* section, const char* name, const char
     pconfig->mono = truefalse(value);
   } else if (MATCH("main","extended_video_modes")) {
     pconfig->extended_video_modes = truefalse(value);
+  } else if (MATCH("main","turbo")) {
+    pconfig->turbo = truefalse(value);
   } else if (MATCH("main","mem_size")) {
     pconfig->mem_size = memorysize(value);
   } else if (MATCH("main", "wakestate")) {
@@ -142,6 +144,7 @@ void config_set_file(const char *filename) {
 void config_load(void) {
   config.mono = 0;
   config.extended_video_modes = 0;
+  config.turbo = 0;
   config.mem_size = CFG_1M;
   config.wakestate = 2;
   config.shifter_wakestate = 0;
@@ -174,6 +177,7 @@ void config_save(void) {
   fprintf(fd,"[main]\n");
   fprintf(fd,"mono = %s\n",config.mono?"true":"false");
   fprintf(fd,"extended_video_modes = %s\n",config.extended_video_modes?"on":"off");
+  fprintf(fd,"turbo = %s\n",config.turbo?"on":"off");
   fprintf(fd,"mem_size = %s\n",memsize_values[config.mem_size]);
   fprintf(fd,"wakestate = %d\n",config.wakestate+1);
   fprintf(fd,"shifter_wakestate = %d\n",config.shifter_wakestate);

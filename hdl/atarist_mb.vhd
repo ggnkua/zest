@@ -34,6 +34,7 @@ entity atarist_mb is
 		shifter_ws		: in std_logic;
 		cfg_extmod		: in std_logic;
 		cfg_romsize		: in std_logic_vector(1 downto 0);
+		cfg_turbo		: in std_logic;
 
 		pclken			: out std_logic;
 		de				: out std_logic;
@@ -92,7 +93,16 @@ entity atarist_mb is
 		rom_a			: out std_logic_vector(23 downto 1);
 		rom_r			: out std_logic;
 		rom_r_done		: in std_logic;
-		rom_r_d			: in std_logic_vector(15 downto 0)
+		rom_r_d			: in std_logic_vector(15 downto 0);
+
+		turboram_a		: out std_logic_vector(23 downto 1);
+		turboram_ds		: out std_logic_vector(1 downto 0);
+		turboram_r		: out std_logic;
+		turboram_r_done	: in std_logic;
+		turboram_w		: out std_logic;
+		turboram_w_done	: in std_logic;
+		turboram_r_d	: in std_logic_vector(15 downto 0);
+		turboram_w_d	: out std_logic_vector(15 downto 0)
 	);
 end atarist_mb;
 
@@ -149,6 +159,8 @@ architecture structure of atarist_mb is
 	signal en2rck		: std_logic;
 	signal en2fck		: std_logic;
 	signal en32ck		: std_logic;
+	signal encpurck		: std_logic;
+	signal encpufck		: std_logic;
 	signal en2_4576ck	: std_logic;
 	signal en250ck		: std_logic;
 	signal ck48			: std_logic;
@@ -220,6 +232,8 @@ architecture structure of atarist_mb is
 	signal s_ram_r		: std_logic;
 	signal ram_ws		: std_logic;
 	signal s_rom_r		: std_logic;
+	signal turboram_ri	: std_logic;
+	signal turbo_on		: std_logic;
 
 	signal shifter_CSn	: std_logic;
 	signal shifter_RWn	: std_logic;
@@ -305,6 +319,9 @@ begin
 	ram_w <= s_ram_w;
 	rom_r <= s_rom_r;
 	rom_a <= bus_a(23 downto 1);
+	turboram_r <= turboram_ri;
+	turboram_w_d <= bus_D;
+	turboram_a <= bus_a(23 downto 1);
 
 	stbus:entity atarist_bus port map(
 		cpu_d => cpu_oD,
@@ -315,6 +332,8 @@ begin
 		ram_e => RDATn,
 		rom_d => rom_r_d,
 		rom_e => s_rom_r,
+		turboram_d => turboram_r_d,
+		turboram_e => turboram_ri,
 		ram_latch => LATCH,
 		mfp_d => mfp_oD,
 		mmu_d => mmu_oD,
@@ -342,8 +361,8 @@ begin
 		HALTn => cpu_HALTn,
 		extReset => reset,
 		pwrUp => reset,
-		enPhi1 => en8rck,
-		enPhi2 => en8fck,
+		enPhi1 => encpurck,
+		enPhi2 => encpufck,
 
 		eRWn => cpu_RWn,
 		ASn => cpu_ASn,
@@ -377,6 +396,7 @@ begin
 			clk => clk,
 			reset => reset,
 			wakestate => wakestate,
+			turbo_on => turbo_on,
 			enNC1 => enNC1,         -- enable 8 MHz rising edges
 			enNC2 => enNC2,         -- enable 8 MHz falling edges
 			en16rck => en16rck,     -- enable 16 MHz rising edge
@@ -384,6 +404,8 @@ begin
 			en8rck => en8rck,       -- enable 8 MHz rising edge
 			en8fck => en8fck,       -- enable 8 MHz falling edge
 			en32ck => en32ck,       -- enable 32 MHz rising edge
+			encpurck => encpurck,
+			encpufck => encpufck,
 			en4rck => en4rck,       -- enable 4 MHz rising edge
 			en4fck => en4fck,       -- enable 4 MHz falling edge
 			en2rck => en2rck,       -- enable 2 MHz rising edge
@@ -397,6 +419,10 @@ begin
 	enNC1 <= clken_video;
 	enNC2 <= clken_bus and clken_dma;
 	clken_bus <= ((not s_rom_r or rom_r_done) and (not s_ram_r or ram_r_done) and (not (s_ram_w or ram_ws) or ram_w_done) and not clken_busdly) or bus_DTACKn or clken_bus2;
+
+	-- TODO: trouver un système de synchro du bus 68000 en mode turbo (ram turbo et ROM) qui ne dépende pas de l'horloge 8 mhz
+	-- et qui attende bien les fins d'accès
+
 	clken_video <= load or not s_ram_r or ram_r_done;
 	clken_dma <= ((not s_ram_r or ram_r_done) and (not ram_ws or ram_w_done)) or mmu_dman;
 
@@ -452,6 +478,13 @@ begin
 		DMAn => mmu_DMAn,
 		DEVn => mmu_DEVn,
 		rom_r => s_rom_r,
+		rom_r_done => rom_r_done,
+		turboram_r => turboram_ri,
+		turboram_r_done => turboram_r_done,
+		turboram_w => turboram_w,
+		turboram_w_done => turboram_w_done,
+		turboram_ds => turboram_ds,
+		turbo_sync => turbo_on,
 		BRn => cpu_BRn,
 		BGn => cpu_BGn,
 		BGACKn => cpu_BGACKn,
@@ -471,7 +504,8 @@ begin
 		wakestate => wakestate,
 		cfg_memtop => mem_top(5 downto 3),
 		cfg_extmod => cfg_extmod,
-		cfg_romsize => cfg_romsize
+		cfg_romsize => cfg_romsize,
+		cfg_turbo => cfg_turbo
 	);
 	glue_iA <= bus_A;
 	glue_iASn <= bus_ASn;
@@ -509,10 +543,10 @@ begin
 		vsync => st_vsync,
 
 		mem_top	=> mem_top,
-		ram_A => ram_A,
+		ram_A => ram_a,
 		ram_W => s_ram_w,
 		ram_R => s_ram_r,
-		ram_DS => ram_DS
+		ram_DS => ram_ds
 	);
 	mmu_iA <= bus_A;
 	mmu_iASn <= bus_ASn;

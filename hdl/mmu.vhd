@@ -346,7 +346,7 @@ begin
 								when x"09" => oD <= video_ptr(7 downto 1) & '0';
 								when others => oD <= x"ff";
 							end case;
-						elsif iRWn = '0' and cnt = 2 then
+						elsif iRWn = '0' then
 							-- write
 							case al is
 								when x"01" => screen_adr(23 downto 16) <= iD;
@@ -360,7 +360,7 @@ begin
 					if iRWn = '1' then
 						-- read
 						oD <= "0000" & memcfg;
-					elsif iRWn = '0' and cnt = 2 then
+					elsif iRWn = '0' then
 						-- write
 						memcfg <= iD(3 downto 0);
 					end if;
@@ -374,7 +374,7 @@ begin
 							when x"0d" => oD <= dma_ptr(7 downto 1) & '0';
 							when others => oD <= x"ff";
 						end case;
-					elsif iRWn = '0' and cnt = 2 then
+					elsif iRWn = '0' then
 						-- write
 						case al is
 							when x"09" => dma_ptr(23 downto 16) <= iD;

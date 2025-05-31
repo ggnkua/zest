@@ -177,6 +177,7 @@ void menu(void) {
     if (config.floppy_b_enable) {
       lv_add_file(lv,"Floppy B",&config.floppy_b,LV_FILE_EJECTABLE,filter_flopimg);
     }
+    lv_add_choice(lv,"CPU Clock",&config.turbo,2,"8 MHz","50 MHz");
     int e_settings = lv_add_action(lv,"Settings");
     int e_tools = lv_add_action(lv,"Tools");
     //lv_add_action(lv,"Shutdown");

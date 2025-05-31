@@ -64,6 +64,16 @@ entity zest_atari_st_core is
 		rom_r_d			: in std_logic_vector(15 downto 0);
 		rom_r_done		: in std_logic;
 
+		-- turbo ram interface signals
+		turboram_a		: out std_logic_vector(31 downto 0);
+		turboram_ds		: out std_logic_vector(1 downto 0);
+		turboram_r		: out std_logic;
+		turboram_r_done	: in std_logic;
+		turboram_w		: out std_logic;
+		turboram_w_done	: in std_logic;
+		turboram_r_d	: in std_logic_vector(15 downto 0);
+		turboram_w_d	: out std_logic_vector(15 downto 0);
+
 		-- video
 		pclk			: in std_logic;		-- independent clock
 		rgb				: out std_logic_vector(23 downto 0);
@@ -111,6 +121,7 @@ architecture structure of zest_atari_st_core is
 
 	signal cfg_extmod	: std_logic;
 	signal cfg_romsize	: std_logic_vector(1 downto 0);
+	signal cfg_turbo	: std_logic;
 
 	signal enable0			: std_logic;
 	signal enable1			: std_logic;
@@ -145,12 +156,13 @@ architecture structure of zest_atari_st_core is
 	signal host_addr		: std_logic_vector(8 downto 0);
 	signal host_track		: std_logic_vector(7 downto 0);
 
-	signal ram_a_23		: std_logic_vector(23 downto 1);
-	signal rom_a_23		: std_logic_vector(23 downto 1);
-	signal fdd_drq		: std_logic;
-	signal fdd_ack		: std_logic;
-	signal fdd_derr		: std_logic;
-	signal acsi_intr	: std_logic;
+	signal ram_a_23			: std_logic_vector(23 downto 1);
+	signal rom_a_23			: std_logic_vector(23 downto 1);
+	signal turboram_a_23	: std_logic_vector(23 downto 1);
+	signal fdd_drq			: std_logic;
+	signal fdd_ack			: std_logic;
+	signal fdd_derr			: std_logic;
+	signal acsi_intr		: std_logic;
 
 	signal in_reg0		: std_logic_vector(31 downto 0);
 	signal in_reg1		: std_logic_vector(31 downto 0);
@@ -204,6 +216,7 @@ begin
 
 	ram_a <= x"00" & ram_a_23 & '0';
 	rom_a <= x"00" & rom_a_23 & '0';
+	turboram_a <= x"00" & turboram_a_23 & '0';
 	monomon <= out_reg0(2);
 	mem_top <= out_reg0(9 downto 4);
 	sound_vol <= out_reg0(14 downto 10);
@@ -216,6 +229,7 @@ begin
 	cfg_romsize <= out_reg0(23 downto 22);
 	shifter_ws <= out_reg0(24);
 	scandbl_mode <= out_reg0(25);
+	cfg_turbo <= out_reg0(26);
 	in_reg0(31) <= host_r;
 	in_reg0(30) <= host_w;
 	in_reg0(29 downto 21) <= host_addr;
@@ -319,6 +333,7 @@ begin
 		shifter_ws => shifter_ws,
 		cfg_extmod => cfg_extmod,
 		cfg_romsize => cfg_romsize,
+		cfg_turbo => cfg_turbo,
 		pclken => pclken,
 		de => st_de,
 		hsync => st_hsync,
@@ -369,7 +384,15 @@ begin
 		rom_a => rom_a_23,
 		rom_r => rom_r,
 		rom_r_done => rom_r_done,
-		rom_r_d => rom_r_d
+		rom_r_d => rom_r_d,
+		turboram_a => turboram_a_23,
+		turboram_ds => turboram_ds,
+		turboram_r => turboram_r,
+		turboram_r_done => turboram_r_done,
+		turboram_w => turboram_w,
+		turboram_w_done => turboram_w_done,
+		turboram_r_d => turboram_r_d,
+		turboram_w_d => turboram_w_d
 	);
 
 	fdd1:entity floppy_drive port map (

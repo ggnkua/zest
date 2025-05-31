@@ -107,6 +107,13 @@ entity glue is
 		DMAn        : out std_logic;
 		DEVn        : out std_logic;
 		rom_r       : out std_logic;
+		rom_r_done  : in std_logic;
+		turboram_r  : out std_logic;
+		turboram_r_done : in std_logic;
+		turboram_w  : out std_logic;
+		turboram_w_done : in std_logic;
+		turboram_ds	: out std_logic_vector(1 downto 0);
+		turbo_sync	: out std_logic;
 
 		BRn         : out std_logic;
 		BGn         : in std_logic;
@@ -130,7 +137,8 @@ entity glue is
 		wakestate   : in std_logic_vector(1 downto 0);
 		cfg_memtop	: in std_logic_vector(2 downto 0);
 		cfg_extmod  : in std_logic;
-		cfg_romsize : in std_logic_vector(1 downto 0)
+		cfg_romsize : in std_logic_vector(1 downto 0);
+		cfg_turbo	: in std_logic
 	);
 end glue;
 
@@ -157,6 +165,7 @@ architecture behavioral of glue is
 	signal vpa_acia	: std_logic;
 	signal sdtackn	: std_logic;
 	signal ymdtackn	: std_logic;
+	signal trdtackn	: std_logic;
 	signal beercnt	: unsigned(5 downto 0);
 	signal rwn_ff	: std_logic;
 	signal dma_w	: std_logic;
@@ -164,10 +173,16 @@ architecture behavioral of glue is
 	signal dma_st	: dma_st_t;
 	signal dma_cnt	: unsigned(2 downto 0);
 	signal sdma		: std_logic;
-	signal sram		: std_logic;
-	signal srom		: std_logic;
+	signal sram		: std_logic;	-- RAM access (standard)
+	signal srom		: std_logic;	-- ROM access
+	signal srturbo	: std_logic;	-- RAM access (turbo)
+	signal turbosyn : std_logic;	-- turbo flag, synchronised between memory accesses
 	signal mmuct	: unsigned(1 downto 0);
 	signal idtackff	: std_logic;
+	signal sdevn	: std_logic;	-- MMU register select
+	signal smfpcsn	: std_logic;	-- MFP select
+	signal sdmacsn	: std_logic;	-- DMA registers select
+	signal spsgcsn	: std_logic;	-- PSG select
 
 	signal ias		: std_logic;
 	signal ifc2z	: std_logic;	-- supervisor
@@ -225,12 +240,13 @@ architecture behavioral of glue is
 
 begin
 
+turbo_sync <= turbosyn;
 vimo_hde <= vid_hde when vsmono = '0' else mono_hde;
 vid_de <= vid_vde and vimo_hde;
 VSYNC <= svsync;
 HSYNC <= shsync;
 VPAn <= vpa_irqn and vpa_acia;
-oDTACKn <= sdtackn;
+oDTACKn <= sdtackn and trdtackn;
 oRDY <= sdma;
 
 ia16 <= iA(15 downto 1) & '0';
@@ -253,40 +269,72 @@ begin
 		DMAn <= '1';
 		RAMn <= '1';
 		rom_r <= '0';
+		turboram_r <= '0';
+		turboram_w <= '0';
+		turboram_ds <= "00";
 	elsif rising_edge(clk) then
 		DMAn <= sdma;
 		RAMn <= sram;
 		rom_r <= srom;
+		turboram_r <= srturbo and iRWn;
+		if srturbo = '1' and iRwn = '0' then
+			turboram_w <= '1';
+			turboram_ds <= not (iUDSn, iLDSn);
+		else
+			turboram_w <= '0';
+			turboram_ds <= "00";
+		end if;
+	end if;
+end process;
+
+-- synchronised turbo flag, to prevent mode switches during memory accesses
+process(clk,resetn)
+begin
+	if resetn = '0' then
+		turbosyn <= '0';
+	elsif rising_edge(clk) then
+		if sram = '1' and sdma = '1' and srom = '0' and srturbo = '0' and sdtackn = '1' and trdtackn = '1' and iDTACKn = '1' then
+			-- if smfpcsn = '0' or sdmacsn = '0' or spsgcsn = '0' or sdevn = '0' or sdevn = '0' then
+			if iASn = '0' and iA(23 downto 20) = x"f" and (unsigned(iA(19 downto 16)) < x"c" or iA(19 downto 16) = x"f") then
+				-- switch to 8 MHz during peripheral accesses
+				turbosyn <= '0';
+			else
+				turbosyn <= cfg_turbo;
+			end if;
+		end if;
 	end if;
 end process;
 
 -- mfp access
+MFPCSn <= smfpcsn;
 process(idev,iA,iASn)
 begin
 	if idev = '1' and iASn = '0' and iA(15 downto 6)&"000000" = x"fa00" then
-		MFPCSn <= '0';
+		smfpcsn <= '0';
 	else
-		MFPCSn <= '1';
+		smfpcsn <= '1';
 	end if;
 end process;
 
 -- dma registers access
+FCSn <= sdmacsn;
 process(idev,iA,iASn,iLDSn,iUDSn)
 begin
 	if idev = '1' and iASn = '0' and iLDSn = '0' and iUDSn = '0' and iA(15 downto 2)&"00" = x"8604" then
-		FCSn <= '0';
+		sdmacsn <= '0';
 	else
-		FCSn <= '1';
+		sdmacsn <= '1';
 	end if;
 end process;
 
 -- YM registers access
+SNDCSn <= spsgcsn;
 process(isndcsb,iUDSn)
 begin
 	if isndcsb = '0' and iUDSn = '0' then
-		SNDCSn <= '0';
+		spsgcsn <= '0';
 	else
-		SNDCSn <= '1';
+		spsgcsn <= '1';
 	end if;
 end process;
 
@@ -324,46 +372,61 @@ begin
 		oD <= (others => '1');
 		ymdtackn <= '1';
 		sdtackn <= '1';
+		trdtackn <= '1';
 		dma_w <= '0';
 	elsif rising_edge(clk) then
-	if en8rck = '1' then
-		oD <= (others => '1');
-		sdtackn <= '1';
-		ymdtackn <= '1';
-		if idev = '1' and iASn = '0' and (iUDSn = '0' or iLDSn = '0' or (iRwn = '0' and rwn_ff = '1')) then
-			-- hardware registers
-			if syncsel = '1' and iUDSn = '0' and iRWn = '1' then
-				oD <= '0'&pal&'0';
+		trdtackn <= '1';
+		if srturbo = '1' then
+			-- DTACKn for turbo mode RAM accesses
+			if iRWn = '1' and turboram_r_done = '1' then
+				trdtackn <= '0';
 			end if;
-			if mdesel = '1' and iUDSn = '0' and iRWn = '1' then
-				-- read resolution
-				-- should be Shifter's job, but we need to allow read access to extmod so we do it in GLUE
-				oD(2) <= cfg_extmod and extmod;
-				oD(1) <= mono;
-				oD(0) <= medres;
+			if iRwn = '0' and turboram_w_done = '1' then
+				trdtackn <= '0';
 			end if;
-			if iA(15 downto 2)&"00" = x"8604" then
-				-- assert DTACKn for DMA register access
+		elsif turbosyn = '1' and srom = '1' then
+			if rom_r_done = '1' then
+				trdtackn <= '0';
+			end if;
+		end if;
+		if en8rck = '1' then
+			oD <= (others => '1');
+			sdtackn <= '1';
+			ymdtackn <= '1';
+			if idev = '1' and iASn = '0' and (iUDSn = '0' or iLDSn = '0' or (iRwn = '0' and rwn_ff = '1')) then
+				-- hardware registers
+				if syncsel = '1' and iUDSn = '0' and iRWn = '1' then
+					oD <= '0'&pal&'0';
+				end if;
+				if mdesel = '1' and iUDSn = '0' and iRWn = '1' then
+					-- read resolution
+					-- should be Shifter's job, but we need to allow read access to extmod so we do it in GLUE
+					oD(2) <= cfg_extmod and extmod;
+					oD(1) <= mono;
+					oD(0) <= medres;
+				end if;
+				if iA(15 downto 2)&"00" = x"8604" then
+					-- assert DTACKn for DMA register access
+					sdtackn <= '0';
+				end if;
+				if isndcsb = '0' then
+					-- assert DTACKn for PSG register access (1 extra cycle delay)
+					ymdtackn <= '0';
+				end if;
+			end if;
+			if srom = '1' and turbosyn = '0' then
+				-- assert DTACKn for ROM access
 				sdtackn <= '0';
 			end if;
-			if isndcsb = '0' then
-				-- assert DTACKn for PSG register access (1 extra cycle delay)
-				ymdtackn <= '0';
+			if idev = '1' and iASn = '0' and iUDSn = '0' and iRWn = '0' then
+				if ia16 = x"8606" then
+					dma_w <= iD(0);
+				end if;
+			end if;
+			if ymdtackn = '0' and iASn = '0' then
+				sdtackn <= '0';
 			end if;
 		end if;
-		if srom = '1' then
-			-- assert DTACKn for ROM access
-			sdtackn <= '0';
-		end if;
-		if idev = '1' and iASn = '0' and iUDSn = '0' and iRWn = '0' then
-			if ia16 = x"8606" then
-				dma_w <= iD(0);
-			end if;
-		end if;
-		if ymdtackn = '0' and iASn = '0' then
-			sdtackn <= '0';
-		end if;
-	end if;
 	end if;
 end process;
 
@@ -398,6 +461,7 @@ end process;
 
 
 -- RAMn / DEVn bus signals to the MMU
+DEVn <= sdevn;
 process(clk,resetn)
 begin
 	if resetn = '0' then
@@ -408,17 +472,18 @@ begin
 		end if;
 	end if;
 end process;
-process(FC,iA,iASn,iUDSn,iLDSn,iRWn,rwn_ff,cfg_romsize,cfg_memtop)
+process(FC,iA,iASn,iUDSn,iLDSn,iRWn,rwn_ff,cfg_romsize,cfg_memtop,turbosyn)
 begin
 	sram <= '1';
 	srom <= '0';
-	DEVn <= '1';
+	srturbo <= '0';
+	sdevn <= '1';
 	if FC /= "111" and iASn = '0' then
 		if iA(23 downto 15) = "111111111" then
 			-- hardware registers
 			if FC(2) = '1' then
 				if iA(15 downto 7)&"0000000" = x"8200" or iA(15 downto 1)&'1' = x"8001" or iA(15 downto 3)&"000" = x"8608" then
-					DEVn <= '0';
+					sdevn <= '0';
 				end if;
 			end if;
 		else
@@ -435,10 +500,12 @@ begin
 				srom <= '1';
 			elsif unsigned(iA&'0') < x"800" and unsigned(iA&'0') >= 8 and FC(2) = '1' then
 				-- protected ram access (supervisor mode only)
-				sram <= '0';
+				sram <= turbosyn;
+				srturbo <= turbosyn;
 			elsif unsigned(iA&'0') >= x"800" and (iA(23 downto 22) = "00" or (cfg_memtop(2 downto 1) /= "00" and unsigned(iA(23 downto 21)) <= unsigned(cfg_memtop))) then
 				-- ram access
-				sram <= '0';
+				sram <= turbosyn;
+				srturbo <= turbosyn;
 			end if;
 		end if;
 	end if;

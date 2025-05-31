@@ -377,6 +377,7 @@ begin
 
 	process(m_axi_aclk,m_axi_aresetn)
 		variable pid	: integer range 0 to NUM_PORTS-1;
+		variable npid	: integer range 0 to NUM_PORTS-1;
 		variable v_wrel	: std_logic := '0';
 	begin
 		if m_axi_aresetn = '0' then
@@ -400,6 +401,12 @@ begin
 			pt_id <= 0;
 			v_wrel := '0';
 		elsif rising_edge(m_axi_aclk) then
+			for i in 0 to NUM_PORTS-1 loop
+				if ir_done(i) = '1' and r(i) = '0' then
+					-- r_d(i*32+31 downto i*32) <= (others => '0');
+					ir_done(i) <= '0';
+				end if;
+			end loop;
 			case rd_state is
 				when INIT =>
 					c_en <= '1';
@@ -415,17 +422,16 @@ begin
 						rd_state <= IDLE;
 					end if;
 				when IDLE =>
-					for i in 0 to NUM_PORTS-1 loop
-						if ir_done(i) = '1' and r(i) = '0' then
-							-- r_d(i*32+31 downto i*32) <= (others => '0');
-							ir_done(i) <= '0';
-						end if;
-					end loop;
 					if r_wait /= (NUM_PORTS-1 downto 0 => '0') or w /= (NUM_PORTS-1 downto 0 => '0') then
 						pid := 0;
 						for i in 0 to NUM_PORTS-1 loop
-							if r_wait(i) = '1' or w(i) = '1' then
-								pid := i;
+							if i + pt_id < NUM_PORTS then
+								npid := i + pt_id;
+							else
+								npid := i + pt_id - NUM_PORTS;
+							end if;
+							if r_wait(npid) = '1' or w(npid) = '1' then
+								pid := npid;
 							end if;
 						end loop;
 						pt_id <= pid;
@@ -583,6 +589,23 @@ entity memory_if_axi is
 		-- Read done signal
 		rom_r_done	: out std_logic;
 
+		-- address
+		turboram_a		: in std_logic_vector(31 downto 0);
+		-- write data
+		turboram_w_d	: in std_logic_vector(15 downto 0);
+		-- read data
+		turboram_r_d	: out std_logic_vector(15 downto 0);
+		-- initiate write transaction
+		turboram_w		: in std_logic;
+		-- initiate read transaction
+		turboram_r		: in std_logic;
+		-- data strobe (for each byte of the data bus)
+		turboram_ds		: in std_logic_vector(1 downto 0);
+		-- Write done signal
+		turboram_w_done	: out std_logic;
+		-- Read done signal
+		turboram_r_done	: out std_logic;
+
 		-- Asserts when ERROR is detected
 		ERROR	: out std_logic;
 		-- Global Clock Signal.
@@ -691,15 +714,23 @@ end memory_if_axi;
 architecture implementation of memory_if_axi is
 	-- RAM address offset
 	constant OFFSET		: unsigned(31 downto 0)	:= x"10000000";
-	constant NUM_PORTS	: integer := 2;
+	constant NUM_PORTS	: integer := 3;
 
+	-- RAM
 	signal ram32_ds		: std_logic_vector(3 downto 0);
 	signal ram32_wd		: std_logic_vector(31 downto 0);
 	signal ram32_rd		: std_logic_vector(31 downto 0);
 	signal ram_a1		: std_logic;
 
+	-- ROM
 	signal rom32_rd		: std_logic_vector(31 downto 0);
 	signal rom_a1		: std_logic;
+
+	-- turbo RAM
+	signal ramt32_ds	: std_logic_vector(3 downto 0);
+	signal ramt32_wd	: std_logic_vector(31 downto 0);
+	signal ramt32_rd	: std_logic_vector(31 downto 0);
+	signal ramt_a1		: std_logic;
 
 	signal a			: std_logic_vector(NUM_PORTS*32-1 downto 0);
 	signal r_d			: std_logic_vector(NUM_PORTS*32-1 downto 0);
@@ -732,12 +763,32 @@ begin
 	w(1) <= '0';
 	rom_r_done <= r_done(1);
 
+	-- turbo RAM port
+	ramt32_wd <= turboram_w_d(7 downto 0) & turboram_w_d(15 downto 8) & turboram_w_d(7 downto 0) & turboram_w_d(15 downto 8);
+	a(95 downto 64) <= turboram_a(31 downto 2) & "00";
+	w_d(95 downto 64) <= ramt32_wd;
+	ramt32_rd <= r_d(95 downto 64);
+	ds(11 downto 8) <= ramt32_ds;
+	r(2) <= turboram_r;
+	w(2) <= turboram_w;
+	turboram_r_done <= r_done(2);
+	turboram_w_done <= w_done(2);
+
 	process(ram_a,ram_ds)
 	begin
 		if ram_a(1) = '1' then
 			ram32_ds <= ram_ds(0) & ram_ds(1) & "00";
 		else
 			ram32_ds <= "00" & ram_ds(0) & ram_ds(1);
+		end if;
+	end process;
+
+	process(turboram_a,turboram_ds)
+	begin
+		if turboram_a(1) = '1' then
+			ramt32_ds <= turboram_ds(0) & turboram_ds(1) & "00";
+		else
+			ramt32_ds <= "00" & turboram_ds(0) & turboram_ds(1);
 		end if;
 	end process;
 
@@ -759,17 +810,30 @@ begin
 		end if;
 	end process;
 
+	process(ramt_a1,ramt32_rd)
+	begin
+		if ramt_a1 = '1' then
+			turboram_r_d <= ramt32_rd(23 downto 16) & ramt32_rd(31 downto 24);
+		else
+			turboram_r_d <= ramt32_rd(7 downto 0) & ramt32_rd(15 downto 8);
+		end if;
+	end process;
+
 	process(m_axi_aclk,m_axi_aresetn)
 	begin
 		if m_axi_aresetn = '0' then
 			ram_a1 <= '0';
 			rom_a1 <= '0';
+			ramt_a1 <= '0';
 		elsif rising_edge(m_axi_aclk) then
 			if ram_r = '1' then
 				ram_a1 <= ram_a(1);
 			end if;
 			if rom_r = '1' then
 				rom_a1 <= rom_a(1);
+			end if;
+			if turboram_r = '1' then
+				ramt_a1 <= turboram_a(1);
 			end if;
 		end if;
 	end process;

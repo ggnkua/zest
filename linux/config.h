@@ -36,7 +36,8 @@ enum cfg_mem_size {
 typedef struct {
   // main
   int mono;                         // 1 if mono, 0 if colour mode
-  int extended_video_modes;					// 1:hardware fullscreen enabled, 0:disabled
+  int extended_video_modes;         // 1:hardware fullscreen enabled, 0:disabled
+  int turbo;                        // turbo mode
   int mem_size;                     // memory size
   int wakestate;                    // wakestate (0-3 for WS1-WS4)
   int shifter_wakestate;            // shifter wakestate (0-1)

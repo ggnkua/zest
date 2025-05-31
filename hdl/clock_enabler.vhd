@@ -33,6 +33,7 @@ entity clock_enabler is
 		clk			: in std_logic;
 		reset		: in std_logic;
 		wakestate	: in std_logic_vector(1 downto 0);
+		turbo_on	: in std_logic;		-- synchronised turbo mode flag
 		enNC1		: in std_logic;		-- enable 8 MHz rising edges
 		enNC2		: in std_logic;		-- enable 8 MHz falling edges
 		en8rck		: out std_logic;	-- enable 8 MHz rising edge
@@ -40,6 +41,8 @@ entity clock_enabler is
 		en16rck		: out std_logic;	-- enable 16 MHz rising edge
 		en16fck		: out std_logic;	-- enable 16 MHz falling edge
 		en32ck		: out std_logic;	-- enable 32 MHz rising edge
+		encpurck	: out std_logic;	-- enable CPU rising edge
+		encpufck	: out std_logic;	-- enable CPU falling edge
 		en4rck		: out std_logic;	-- enable 4 MHz rising edge
 		en4fck		: out std_logic;	-- enable 4 MHz falling edge
 		en2rck		: out std_logic;	-- enable 2 MHz rising edge
@@ -71,6 +74,9 @@ architecture behavioral of clock_enabler is
 	signal en24			: std_logic;
 	signal err			: std_logic;
 	signal new_phase	: std_logic;
+	signal last_cpu_frt	: std_logic;	-- last CPU clock edge - 0: falling, 1: rising
+	signal en_turbo_fck	: std_logic;
+	signal en_turbo_rck	: std_logic;
 
 begin
 	-- TODO remove the 1 cycle delay between enNC and enPhi
@@ -87,6 +93,55 @@ begin
 	ck48 <= sclk;
 	cnt2 <= cnt05(1 downto 0) + unsigned(wakestate);
 	error <= err;
+
+	-- turbo clock (max frequency)
+	process(clk,reset)
+	begin
+		if reset = '1' then
+			en_turbo_fck <= '1';
+			en_turbo_rck <= '0';
+		elsif rising_edge(clk) then
+			en_turbo_fck <= not en_turbo_fck;
+			en_turbo_rck <= en_turbo_fck;
+		end if;
+	end process;
+
+	-- CPU clock enables (8 Mhz or turbo 50 MHz)
+	process(turbo_on,en1,en2,last_cpu_frt)
+	begin
+		if turbo_on = '0' then
+			encpurck <= en1 and not last_cpu_frt;
+			encpufck <= en2 and last_cpu_frt;
+		else
+			encpurck <= en_turbo_rck and not last_cpu_frt;
+			encpufck <= en_turbo_fck and last_cpu_frt;
+		end if;
+	end process;
+
+	-- latest CPU clock edge
+	process(clk,reset)
+	begin
+		if reset = '1' then
+			last_cpu_frt <= '0';
+		elsif rising_edge(clk) then
+			if turbo_on = '1' then
+				if en_turbo_rck = '1' then
+					last_cpu_frt <= '1';
+				end if;
+				if en_turbo_fck = '1' then
+					last_cpu_frt <= '0';
+				end if;
+			else
+				if en1 = '1' then
+					last_cpu_frt <= '1';
+				end if;
+				if en2 = '1' then
+					last_cpu_frt <= '0';
+				end if;
+			end if;
+		end if;
+	end process;
+
 
 	process(phase,enNC1,enNC2,delay,cnt)
 	begin

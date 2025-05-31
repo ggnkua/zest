@@ -92,6 +92,7 @@ static void setup_cfg(unsigned int reset) {
   cfg |= cfg_romsize<<22;
   cfg |= config.shifter_wakestate<<24;
   cfg |= config.scan_doubler_mode<<25;
+  cfg |= config.turbo<<26;
   parmreg[0] = cfg;
 }
 
