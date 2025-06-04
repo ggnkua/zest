@@ -45,7 +45,7 @@ architecture behavioral of shifter is
 	signal palette	: palette_t;
 
 	signal monopal	: std_logic;
-	signal address	: integer;
+	signal address	: integer range 0 to 31;
 	-- resolution
 	signal res		: std_logic_vector(1 downto 0);
 	signal res_ff	: std_logic_vector(1 downto 0);
