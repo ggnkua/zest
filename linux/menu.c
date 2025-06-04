@@ -70,47 +70,61 @@ static int filter_directory(const struct dirent *e) {
 }
 
 static int settings(void) {
-  ListView *lv = lv_new(XPOS,YPOS,WIDTH,HEIGHT,"zeST settings",menu_palette);
-  int entry_height = lv_entry_height();
-  uint32_t gradient_header[entry_height];
-  gradient(gradient_header,entry_height/2,0x00ff0000,0xffc000);
-  gradient(gradient_header+entry_height/2,entry_height-entry_height/2,0xffc000,0xff0000);
-  int i;
-  for (i=0;i<entry_height;++i) {
-    lv_set_colour_change(lv,i,1,gradient_header[i]);
-  }
-  lv_set_colour_change(lv,entry_height,1,menu_palette[1]);
-  lv_add_choice(lv,"Monitor type",&config.mono,2,"PAL/NTSC","Monochrome");
-  lv_add_choice(lv,"RAM size",&config.mem_size,8,"256K","512K","1M","2M","2.5M","4M","8M","14M");
-  lv_add_choice(lv,"Extended video modes",&config.extended_video_modes,2,"no","yes");
-  lv_add_choice(lv,"Scan doubler mode",&config.scan_doubler_mode,2,"VGA","CRT");
-  lv_add_choice(lv,"Wakestate",&config.wakestate,4,"WS1","WS2","WS3","WS4");
-  lv_add_choice(lv,"Shifter Wakestate",&config.shifter_wakestate,2,"SWS1","SWS2");
-  lv_add_file(lv,"System ROM",&config.rom_file,0,filter_img);
-  lv_add_choice(lv,"Enable floppy A",&config.floppy_a_enable,2,"no","yes");
-  lv_add_choice(lv,"Write protect floppy A",&config.floppy_a_write_protect,2,"no","yes");
-  lv_add_choice(lv,"Enable floppy B",&config.floppy_b_enable,2,"no","yes");
-  lv_add_choice(lv,"Write protect floppy B",&config.floppy_b_write_protect,2,"no","yes");
-  lv_add_file(lv,"Hard disk image",&config.hdd_image,LV_FILE_EJECTABLE,filter_img);
-  lv_add_choice(lv,"Right Alt key",&config.right_alt_is_altgr,2,"Alternate","AltGr");
-  int e_save_cfg = lv_add_action(lv,"Save config");
-
   char tmp_rom[1024] = {0};
   if (config.rom_file) strcpy(tmp_rom,config.rom_file);
   char tmp_hdd[1024] = {0};
-  int hdd_set = config.hdd_image!=NULL;
   if (config.hdd_image) strcpy(tmp_hdd,config.hdd_image);
   int mem_size = config.mem_size;
   int mono = config.mono;
-  int reset = 0;
-  for (;;) {
-    int e = lv_run(lv);
-    if (e==e_save_cfg) {
-      config_save();
+  int hdd_set = config.hdd_image!=NULL;
+
+  int quit = 0;
+  while (!quit) {
+    ListView *lv = lv_new(XPOS,YPOS,WIDTH,HEIGHT,"zeST settings",menu_palette);
+    int entry_height = lv_entry_height();
+    uint32_t gradient_header[entry_height];
+    gradient(gradient_header,entry_height/2,0x00ff0000,0xffc000);
+    gradient(gradient_header+entry_height/2,entry_height-entry_height/2,0xffc000,0xff0000);
+    int i;
+    for (i=0;i<entry_height;++i) {
+      lv_set_colour_change(lv,i,1,gradient_header[i]);
     }
-    break;
+    lv_set_colour_change(lv,entry_height,1,menu_palette[1]);
+    lv_add_choice(lv,"Monitor type",&config.mono,2,"PAL/NTSC","Monochrome");
+    lv_add_choice(lv,"RAM size",&config.mem_size,8,"256K","512K","1M","2M","2.5M","4M","8M","14M");
+    int e_turbo = lv_add_choice(lv,"Turbo mode",&config.turbo,2,"off","on");
+    lv_add_choice(lv,"Extended video modes",&config.extended_video_modes,2,"no","yes");
+    lv_add_choice(lv,"Scan doubler mode",&config.scan_doubler_mode,2,"VGA","CRT");
+    lv_add_choice(lv,"Wakestate",&config.wakestate,4,"WS1","WS2","WS3","WS4");
+    lv_add_choice(lv,"Shifter Wakestate",&config.shifter_wakestate,2,"SWS1","SWS2");
+    lv_add_file(lv,"System ROM",&config.rom_file,0,filter_img);
+    lv_add_choice(lv,"Enable floppy A",&config.floppy_a_enable,2,"no","yes");
+    lv_add_choice(lv,"Write protect floppy A",&config.floppy_a_write_protect,2,"no","yes");
+    lv_add_choice(lv,"Enable floppy B",&config.floppy_b_enable,2,"no","yes");
+    lv_add_choice(lv,"Write protect floppy B",&config.floppy_b_write_protect,2,"no","yes");
+    lv_add_file(lv,"Hard disk image",&config.hdd_image,LV_FILE_EJECTABLE,filter_img);
+    lv_add_choice(lv,"Right Alt key",&config.right_alt_is_altgr,2,"Alternate","AltGr");
+    int e_save_cfg = lv_add_action(lv,"Save config");
+    lv_choice_set_dynamic(lv,e_turbo,1);
+
+    for (;;) {
+      int e = lv_run(lv);
+      if (e==e_save_cfg) {
+        config_save();
+      }
+      else if (e==e_turbo) {
+        if (config.turbo && config.mem_size<5) {
+          // in current version of zeST, only memory sizes of 4M and more are supported in turbo mode
+          config.mem_size = 5;
+        }
+      }
+      else {
+        quit = 1;
+      }
+      break;
+    }
+    lv_delete(lv);
   }
-  lv_delete(lv);
 
   if (strcmp(config.rom_file,tmp_rom)) {
     load_rom(config.rom_file);
@@ -120,7 +134,7 @@ static int settings(void) {
   if (hdd_set!=(config.hdd_image!=NULL)) return 1;
   if (hdd_set&&strcmp(config.hdd_image,tmp_hdd)) return 1;
 
-  return reset || config.mem_size!=mem_size || config.mono!=mono;
+  return config.mem_size!=mem_size || config.mono!=mono;
 }
 
 static int tools(void) {
@@ -177,7 +191,6 @@ void menu(void) {
     if (config.floppy_b_enable) {
       lv_add_file(lv,"Floppy B",&config.floppy_b,LV_FILE_EJECTABLE,filter_flopimg);
     }
-    lv_add_choice(lv,"CPU Clock",&config.turbo,2,"8 MHz","50 MHz");
     int e_settings = lv_add_action(lv,"Settings");
     int e_tools = lv_add_action(lv,"Tools");
     //lv_add_action(lv,"Shutdown");
