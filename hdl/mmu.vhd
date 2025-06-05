@@ -85,6 +85,7 @@ architecture behavioral of mmu is
 	signal mode_load_0		: std_logic;
 	signal mode_load_1		: std_logic;
 	signal mode_load		: std_logic;
+	signal mode_reg			: std_logic;
 	signal cmpcsn_en		: std_logic;
 	signal sdtackn			: std_logic;
 	signal sde				: std_logic;
@@ -226,7 +227,7 @@ begin
 		if (cnt = 1 and (DMAn = '0' or (RAMn = '0' and iRWn = '1' and present_bus = '1')))
 		or ((cnt = 1 or cnt = 2) and RAMn = '0' and iRWn = '0' and present_bus = '1') then
 			mode_bus_1 <= '1';
-			-- valid ST RAM/ROM address
+			-- valid ST RAM address
 			if RAMn = '0' then
 				log_adr <= iA;
 			elsif DMAn = '0' then
@@ -273,7 +274,7 @@ begin
 				ram_R <= '0';
 			elsif mode_bus_1 = '1' then
 				mode_bus <= '1';
-				-- valid ST RAM/ROM address
+				-- valid ST RAM address
 				ram_A <= phys_adr;
 				if RAMn = '0' then
 					ram_DS <= not (iUDSn,iLDSn);
@@ -311,9 +312,10 @@ begin
 		sde <= '0';
 		loadn <= '1';
 		cmpcsn_en <= '0';
+		mode_reg <= '0';
 	elsif rising_edge(clk) then
 		if en8rck = '1' then
-			if (RAMn = '0' or DEVn = '0') and cnt = 2 then
+			if mode_reg = '1' then
 				sdtackn <= '0';
 			end if;
 			if cnt = 0 then
@@ -331,7 +333,11 @@ begin
 			end if;
 
 			oD <= (others => '1');
-			if (cnt = 1 or cnt = 2) and iASn = '0' then
+			mode_reg <= '0';
+			if (RAMn = '0' or DEVn = '0') and cnt = 1 then
+				mode_reg <= '1';
+			end if;
+			if mode_reg = '1' then
 				-- hardware registers
 				if iA(23 downto 7) & "0000000" = x"ff8200" then
 					if iLDSn = '0' then

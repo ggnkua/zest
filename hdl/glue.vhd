@@ -294,7 +294,7 @@ begin
 		turbosyn <= '0';
 	elsif rising_edge(clk) then
 		if sram = '1' and sdma = '1' and srom = '0' and srturbo = '0' and sdtackn = '1' and trdtackn = '1' and iDTACKn = '1' then
-			-- if smfpcsn = '0' or sdmacsn = '0' or spsgcsn = '0' or sdevn = '0' or sdevn = '0' then
+			-- change turbo flag only between memory accesses
 			if iASn = '0' and iA(23 downto 20) = x"f" and (unsigned(iA(19 downto 16)) < x"c" or iA(19 downto 16) = x"f") then
 				-- switch to 8 MHz during peripheral accesses
 				turbosyn <= '0';
