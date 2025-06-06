@@ -650,6 +650,14 @@ proc cr_bd_ps_domain { parentCell } {
   set resetn [ create_bd_port -dir O -type rst resetn ]
   set vid5_clk [ create_bd_port -dir O -type clk vid5_clk ]
   set vid_clk [ create_bd_port -dir O -type clk vid_clk ]
+  set turboram_r_d [ create_bd_port -dir O -from 15 -to 0 turboram_r_d ]
+  set turboram_w_done [ create_bd_port -dir O turboram_w_done ]
+  set turboram_r_done [ create_bd_port -dir O turboram_r_done ]
+  set turboram_r [ create_bd_port -dir I turboram_r ]
+  set turboram_w [ create_bd_port -dir I turboram_w ]
+  set turboram_ds [ create_bd_port -dir I -from 1 -to 0 turboram_ds ]
+  set turboram_a [ create_bd_port -dir I -from 31 -to 0 turboram_a ]
+  set turboram_w_d [ create_bd_port -dir I -from 15 -to 0 turboram_w_d ]
 
   # Create instance: bridge_host_0, and set properties
   set block_name bridge_host
@@ -1110,6 +1118,14 @@ proc cr_bd_ps_domain { parentCell } {
   connect_bd_net -net processing_system7_0_FCLK_CLK0 [get_bd_ports clk] [get_bd_pins bridge_host_0/s_axi_aclk] [get_bd_pins clk_wiz_0/clk_in1] [get_bd_pins memory_if_axi_0/m_axi_aclk] [get_bd_pins processing_system7_0/FCLK_CLK0] [get_bd_pins processing_system7_0/M_AXI_GP0_ACLK] [get_bd_pins processing_system7_0/S_AXI_HP0_ACLK] [get_bd_pins ps7_0_axi_periph/ACLK] [get_bd_pins ps7_0_axi_periph/M00_ACLK] [get_bd_pins ps7_0_axi_periph/S00_ACLK] [get_bd_pins rst_ps7_0_100M/slowest_sync_clk]
   connect_bd_net -net processing_system7_0_FCLK_RESET0_N [get_bd_ports resetn] [get_bd_pins processing_system7_0/FCLK_RESET0_N] [get_bd_pins rst_ps7_0_100M/ext_reset_in]
   connect_bd_net -net rst_ps7_0_100M_peripheral_aresetn [get_bd_pins bridge_host_0/s_axi_aresetn] [get_bd_pins clk_wiz_0/resetn] [get_bd_pins memory_if_axi_0/m_axi_aresetn] [get_bd_pins ps7_0_axi_periph/ARESETN] [get_bd_pins ps7_0_axi_periph/M00_ARESETN] [get_bd_pins ps7_0_axi_periph/S00_ARESETN] [get_bd_pins rst_ps7_0_100M/peripheral_aresetn]
+  connect_bd_net -net memory_if_axi_0_turboram_r_d [get_bd_pins memory_if_axi_0/turboram_r_d] [get_bd_ports turboram_r_d]
+  connect_bd_net -net memory_if_axi_0_turboram_r_done [get_bd_pins memory_if_axi_0/turboram_r_done] [get_bd_ports turboram_r_done]
+  connect_bd_net -net memory_if_axi_0_turboram_w_done [get_bd_pins memory_if_axi_0/turboram_w_done] [get_bd_ports turboram_w_done]
+  connect_bd_net -net turboram_a_0_1 [get_bd_ports turboram_a] [get_bd_pins memory_if_axi_0/turboram_a]
+  connect_bd_net -net turboram_ds_0_1 [get_bd_ports turboram_ds] [get_bd_pins memory_if_axi_0/turboram_ds]
+  connect_bd_net -net turboram_r_0_1 [get_bd_ports turboram_r] [get_bd_pins memory_if_axi_0/turboram_r]
+  connect_bd_net -net turboram_w_0_1 [get_bd_ports turboram_w] [get_bd_pins memory_if_axi_0/turboram_w]
+  connect_bd_net -net turboram_w_d_0_1 [get_bd_ports turboram_w_d] [get_bd_pins memory_if_axi_0/turboram_w_d]
 
   # Create address segments
   assign_bd_address -offset 0x00000000 -range 0x20000000 -target_address_space [get_bd_addr_spaces memory_if_axi_0/m_axi] [get_bd_addr_segs processing_system7_0/S_AXI_HP0/HP0_DDR_LOWOCM] -force

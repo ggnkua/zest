@@ -100,6 +100,14 @@ architecture structure of zest_top is
 			rom_r : in std_logic;
 			rom_r_d : out std_logic_vector(15 downto 0);
 			rom_r_done : out std_logic;
+			turboram_a : in std_logic_vector(31 downto 0);
+			turboram_ds : in std_logic_vector(1 downto 0);
+			turboram_r : in std_logic;
+			turboram_r_d : out std_logic_vector(15 downto 0);
+			turboram_r_done : out std_logic;
+			turboram_w : in std_logic;
+			turboram_w_d : in std_logic_vector(15 downto 0);
+			turboram_w_done : out std_logic;
 			resetn : out std_logic;
 			vid5_clk : out std_logic;
 			vid_clk : out std_logic
@@ -131,6 +139,14 @@ architecture structure of zest_top is
 	signal rom_r 		: std_logic;
 	signal rom_r_d 		: std_logic_vector(15 downto 0);
 	signal rom_r_done 	: std_logic;
+	signal turboram_a		: std_logic_vector(31 downto 0);
+	signal turboram_ds		: std_logic_vector(1 downto 0);
+	signal turboram_w		: std_logic;
+	signal turboram_w_d		: std_logic_vector(15 downto 0);
+	signal turboram_w_done	: std_logic;
+	signal turboram_r		: std_logic;
+	signal turboram_r_d		: std_logic_vector(15 downto 0);
+	signal turboram_r_done	: std_logic;
 
 	signal pclk			: std_logic;
 	signal p5clk		: std_logic;
@@ -192,6 +208,14 @@ begin
 		rom_r => rom_r,
 		rom_r_d => rom_r_d,
 		rom_r_done => rom_r_done,
+		turboram_a => turboram_a,
+		turboram_ds => turboram_ds,
+		turboram_r => turboram_r,
+		turboram_r_d => turboram_r_d,
+		turboram_r_done => turboram_r_done,
+		turboram_w => turboram_w,
+		turboram_w_d => turboram_w_d,
+		turboram_w_done => turboram_w_done,
 		resetn => resetn,
 		vid5_clk => p5clk,
 		vid_clk => pclk
@@ -222,6 +246,14 @@ begin
 		rom_r => rom_r,
 		rom_r_d => rom_r_d,
 		rom_r_done => rom_r_done,
+		turboram_a => turboram_a,
+		turboram_ds => turboram_ds,
+		turboram_r => turboram_r,
+		turboram_r_d => turboram_r_d,
+		turboram_r_done => turboram_r_done,
+		turboram_w => turboram_w,
+		turboram_w_d => turboram_w_d,
+		turboram_w_done => turboram_w_done,
 
 		pclk => pclk,
 		rgb => rgb,
