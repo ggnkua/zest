@@ -185,6 +185,7 @@ architecture behavioral of glue is
 	signal spsgcsn	: std_logic;	-- PSG select
 
 	signal ias		: std_logic;
+	signal asn_ff	: std_logic;
 	signal ifc2z	: std_logic;	-- supervisor
 	signal iiack	: std_logic;	-- cpu space
 	signal fcx		: std_logic;	-- data/program
@@ -272,11 +273,13 @@ begin
 		turboram_r <= '0';
 		turboram_w <= '0';
 		turboram_ds <= "00";
+		asn_ff <= '1';
 	elsif rising_edge(clk) then
 		DMAn <= sdma;
 		RAMn <= sram;
 		rom_r <= srom;
 		turboram_r <= srturbo and iRWn;
+		asn_ff <= iASn;
 		if srturbo = '1' and iRwn = '0' then
 			turboram_w <= '1';
 			turboram_ds <= not (iUDSn, iLDSn);
@@ -318,9 +321,9 @@ end process;
 
 -- dma registers access
 FCSn <= sdmacsn;
-process(idev,iA,iASn,iLDSn,iUDSn)
+process(idev,iA,iASn)
 begin
-	if idev = '1' and iASn = '0' and iLDSn = '0' and iUDSn = '0' and iA(15 downto 2)&"00" = x"8604" then
+	if idev = '1' and iASn = '0' and iA(15 downto 2)&"00" = x"8604" then
 		sdmacsn <= '0';
 	else
 		sdmacsn <= '1';
@@ -393,7 +396,7 @@ begin
 			oD <= (others => '1');
 			sdtackn <= '1';
 			ymdtackn <= '1';
-			if idev = '1' and iASn = '0' and (iUDSn = '0' or iLDSn = '0' or (iRwn = '0' and rwn_ff = '1')) then
+			if idev = '1' and asn_ff = '0' and (iUDSn = '0' or iLDSn = '0' or (iRwn = '0' and rwn_ff = '1')) then
 				-- hardware registers
 				if syncsel = '1' and iUDSn = '0' and iRWn = '1' then
 					oD <= '0'&pal&'0';
@@ -418,12 +421,12 @@ begin
 				-- assert DTACKn for ROM access
 				sdtackn <= '0';
 			end if;
-			if idev = '1' and iASn = '0' and iUDSn = '0' and iRWn = '0' then
+			if idev = '1' and asn_ff = '0' and iUDSn = '0' and iRWn = '0' then
 				if ia16 = x"8606" then
 					dma_w <= iD(0);
 				end if;
 			end if;
-			if ymdtackn = '0' and iASn = '0' then
+			if ymdtackn = '0' and asn_ff = '0' then
 				sdtackn <= '0';
 			end if;
 		end if;
