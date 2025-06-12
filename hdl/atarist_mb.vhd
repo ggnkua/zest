@@ -502,7 +502,7 @@ begin
 		vid_hsync => hsync,
 		vid_de => de,
 		wakestate => wakestate,
-		cfg_memtop => mem_top(5 downto 3),
+		cfg_memtop => mem_top,
 		cfg_extmod => cfg_extmod,
 		cfg_romsize => cfg_romsize,
 		cfg_turbo => cfg_turbo

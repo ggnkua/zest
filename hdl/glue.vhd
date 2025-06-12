@@ -135,7 +135,7 @@ entity glue is
 		vid_de	    : out std_logic;
 
 		wakestate   : in std_logic_vector(1 downto 0);
-		cfg_memtop	: in std_logic_vector(2 downto 0);
+		cfg_memtop	: in std_logic_vector(5 downto 0);
 		cfg_extmod  : in std_logic;
 		cfg_romsize : in std_logic_vector(1 downto 0);
 		cfg_turbo	: in std_logic
@@ -505,7 +505,7 @@ begin
 				-- protected ram access (supervisor mode only)
 				sram <= turbosyn;
 				srturbo <= turbosyn;
-			elsif unsigned(iA&'0') >= x"800" and (iA(23 downto 22) = "00" or (cfg_memtop(2 downto 1) /= "00" and unsigned(iA(23 downto 21)) <= unsigned(cfg_memtop))) then
+			elsif unsigned(iA&'0') >= x"800" and (iA(23 downto 22) = "00" or (cfg_memtop(5 downto 4) /= "00" and unsigned(iA(23 downto 18)) <= unsigned(cfg_memtop))) then
 				-- ram access
 				sram <= turbosyn;
 				srturbo <= turbosyn;
