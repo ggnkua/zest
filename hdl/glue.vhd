@@ -177,6 +177,8 @@ architecture behavioral of glue is
 	signal srom		: std_logic;	-- ROM access
 	signal srturbo	: std_logic;	-- RAM access (turbo)
 	signal turbosyn : std_logic;	-- turbo flag, synchronised between memory accesses
+	signal mem_over	: std_logic;	-- memory overflow
+	signal mem_err	: std_logic;	-- memory error
 	signal mmuct	: unsigned(1 downto 0);
 	signal idtackff	: std_logic;
 	signal sdevn	: std_logic;	-- MMU register select
@@ -263,6 +265,8 @@ mono_i <= iD(1) when mdesel = '1' and iRWn = '0' and iUDSn = '0' else mono_ff;
 pal_i <= iD(1) when syncsel = '1' and iRWn = '0' and iUDSn = '0' else pal_ff;
 mono <= mono_i;
 pal <= pal_ff;
+mem_over <= '1' when unsigned(iA(23 downto 18)) > unsigned(cfg_memtop) else '0';
+mem_err <= mem_over when iA(23 downto 22) /= "00" else '0';
 
 process(clk,resetn)
 begin
@@ -280,7 +284,7 @@ begin
 		rom_r <= srom;
 		turboram_r <= srturbo and iRWn;
 		asn_ff <= iASn;
-		if srturbo = '1' and iRwn = '0' then
+		if srturbo = '1' and iRwn = '0' and mem_over = '0' then
 			turboram_w <= '1';
 			turboram_ds <= not (iUDSn, iLDSn);
 		else
@@ -387,6 +391,8 @@ begin
 			if iRwn = '0' and turboram_w_done = '1' then
 				trdtackn <= '0';
 			end if;
+		elsif turbosyn = '1' and mem_over = '1' and mem_err = '0' then
+			trdtackn <= '0';
 		elsif turbosyn = '1' and srom = '1' then
 			if rom_r_done = '1' then
 				trdtackn <= '0';
@@ -475,7 +481,7 @@ begin
 		end if;
 	end if;
 end process;
-process(FC,iA,iASn,iUDSn,iLDSn,iRWn,rwn_ff,cfg_romsize,cfg_memtop,turbosyn)
+process(FC,iA,iASn,iUDSn,iLDSn,iRWn,rwn_ff,cfg_romsize,mem_over,mem_err,turbosyn)
 begin
 	sram <= '1';
 	srom <= '0';
@@ -505,10 +511,10 @@ begin
 				-- protected ram access (supervisor mode only)
 				sram <= turbosyn;
 				srturbo <= turbosyn;
-			elsif unsigned(iA&'0') >= x"800" and (iA(23 downto 22) = "00" or (cfg_memtop(5 downto 4) /= "00" and unsigned(iA(23 downto 18)) <= unsigned(cfg_memtop))) then
+			elsif unsigned(iA&'0') >= x"800" and mem_err = '0' then
 				-- ram access
 				sram <= turbosyn;
-				srturbo <= turbosyn;
+				srturbo <= turbosyn and not mem_over;
 			end if;
 		end if;
 	end if;
