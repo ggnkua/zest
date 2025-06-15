@@ -97,7 +97,7 @@ static int settings(void) {
     int e_turbo = lv_add_choice(lv,"Turbo mode",&config.turbo,2,"off","on");
     lv_add_choice(lv,"Extended video modes",&config.extended_video_modes,2,"no","yes");
     lv_add_choice(lv,"Scan doubler mode",&config.scan_doubler_mode,2,"VGA","CRT");
-    lv_add_choice(lv,"Wakestate",&config.wakestate,4,"WS1","WS2","WS3","WS4");
+    int e_wakestate = lv_add_choice(lv,"Wakestate",&config.wakestate,4,"WS1","WS2","WS3","WS4");
     lv_add_choice(lv,"Shifter Wakestate",&config.shifter_wakestate,2,"SWS1","SWS2");
     lv_add_file(lv,"System ROM",&config.rom_file,0,filter_img);
     lv_add_choice(lv,"Enable floppy A",&config.floppy_a_enable,2,"no","yes");
@@ -108,6 +108,7 @@ static int settings(void) {
     lv_add_choice(lv,"Right Alt key",&config.right_alt_is_altgr,2,"Alternate","AltGr");
     int e_save_cfg = lv_add_action(lv,"Save config");
     lv_choice_set_dynamic(lv,e_turbo,1);
+    lv_choice_set_dynamic(lv,e_wakestate,1);
     lv_select(lv,selected);
 
     for (;;) {
@@ -125,6 +126,10 @@ static int settings(void) {
           // -> dynamically update the turbo mode
           setup_update();
         }
+      }
+      else if (selected==e_wakestate) {
+        // dynamically update the wakestate
+        setup_update();
       }
       else {
         quit = 1;
