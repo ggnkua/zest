@@ -79,6 +79,8 @@ static int settings(void) {
   int hdd_set = config.hdd_image!=NULL;
 
   int quit = 0;
+  int selected = 0;
+  int ret = 0;
   while (!quit) {
     ListView *lv = lv_new(XPOS,YPOS,WIDTH,HEIGHT,"zeST settings",menu_palette);
     int entry_height = lv_entry_height();
@@ -106,16 +108,22 @@ static int settings(void) {
     lv_add_choice(lv,"Right Alt key",&config.right_alt_is_altgr,2,"Alternate","AltGr");
     int e_save_cfg = lv_add_action(lv,"Save config");
     lv_choice_set_dynamic(lv,e_turbo,1);
+    lv_select(lv,selected);
 
     for (;;) {
-      int e = lv_run(lv);
-      if (e==e_save_cfg) {
+      selected = lv_run(lv);
+      if (selected==e_save_cfg) {
         config_save();
       }
-      else if (e==e_turbo) {
+      else if (selected==e_turbo) {
         if (config.turbo && config.mem_size<5) {
-          // in current version of zeST, only memory sizes of 4M and more are supported in turbo mode
-          config.mem_size = 5;
+          // in current version of zeST, only memory sizes of 2M, 4M and more are supported in turbo mode
+          config.mem_size = config.mem_size<=3?3:5;
+        }
+        if (mem_size==config.mem_size && (mem_size==3||mem_size>=5)) {
+          // turbo mode changed, and memory is linearly mapped (only 2M memory banks, or extended memory)
+          // -> dynamically update the turbo mode
+          setup_update();
         }
       }
       else {
@@ -128,13 +136,18 @@ static int settings(void) {
 
   if (strcmp(config.rom_file,tmp_rom)) {
     load_rom(config.rom_file);
-    return 1;
+    ret = 1;
   }
   hdd_changeimg(config.hdd_image);
-  if (hdd_set!=(config.hdd_image!=NULL)) return 1;
-  if (hdd_set&&strcmp(config.hdd_image,tmp_hdd)) return 1;
+  if (hdd_set!=(config.hdd_image!=NULL)) ret = 1;
+  if (hdd_set&&strcmp(config.hdd_image,tmp_hdd)) ret = 1;
 
-  return config.mem_size!=mem_size || config.mono!=mono;
+  if (config.turbo && config.mem_size<5 && config.mem_size!=3) {
+    // if turbo mode was changed and memory size is not 2M or 4M+ (linear memory mapping)
+    config.mem_size = config.mem_size<=3?3:5;
+  }
+  if (config.mem_size!=mem_size || config.mono!=mono) ret = 1;
+  return ret;
 }
 
 static int tools(void) {
