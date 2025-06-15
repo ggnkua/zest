@@ -27,6 +27,7 @@
 #include "input.h"
 #include "menu.h"
 #include "infomsg.h"
+#include "setup.h"
 
 #define JOY_EMU_LED_FILE "/sys/class/leds/led1/brightness"
 
@@ -101,6 +102,20 @@ void * thread_ikbd(void * arg) {
                     infomsg_display("Joystick emulation on");
                   } else {
                     infomsg_display("Joystick emulation off");
+                  }
+                }
+                break;
+              case KEY_T:
+                if (evvalue == 1) {
+                  if (config.mem_size==3 || config.mem_size>=5) {
+                    // turbo mode-compatible memory sizes
+                    config.turbo = !config.turbo;
+                    setup_update();
+                    if (config.turbo) {
+                      infomsg_display("Turbo on");
+                    } else {
+                      infomsg_display("Turbo off");
+                    }
                   }
                 }
                 break;

@@ -49,7 +49,7 @@ floppy.o: floppy.c floppy.h floppy_img.h hdd.h midi.h config.h
 
 floppy_img.o: floppy_img.c floppy_img.h
 
-ikbd.o: ikbd.c input.h menu.h config.h infomsg.h
+ikbd.o: ikbd.c input.h menu.h config.h infomsg.h setup.h
 
 listview.o: listview.c listview.h input.h osd.h font.h misc.h
 
