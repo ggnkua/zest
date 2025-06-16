@@ -215,7 +215,7 @@ void * thread_jukebox(void * arg) {
           change_floppy(new_disk_image_name,0);
           //config.mem_size = selected_ram_size;
           cold_reset();
-          jukebox_timeout = config.jukebox_timeout_duration + gettime();
+          jukebox_timeout = (uint64_t)config.jukebox_timeout_duration*1000000U + gettime();
           infomsg_display(new_disk_image_name);
         }
       }

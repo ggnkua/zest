@@ -120,10 +120,10 @@ static int handler(void* user, const char* section, const char* name, const char
   } else if (MATCH("jukebox","path")) {
     if (value) pconfig->jukebox_path = strdup(value);
   } else if (MATCH("jukebox","timeout")) {
-    uint64_t t = atoi(value)*1000000ULL;
+    int t = atoi(value);
     if (t < 1)
     {
-      printf("Invalid jukebox timeout value '%lld'\n", t);
+      printf("Invalid jukebox timeout value '%d'\n", t);
     } else {
       pconfig->jukebox_timeout_duration = t;
     }
@@ -159,7 +159,7 @@ void config_load(void) {
   config.hdd_image = NULL;
   config.right_alt_is_altgr = 0;
   config.jukebox_enabled = 0;
-  config.jukebox_timeout_duration = 90000000;
+  config.jukebox_timeout_duration = 90;
   config.jukebox_path = NULL;
 
   if (ini_parse(config_file,handler,&config) < 0) {
@@ -201,7 +201,7 @@ void config_save(void) {
   fprintf(fd,"\n[jukebox]\n");
   fprintf(fd,"enabled = %s\n",config.jukebox_enabled?"true":"false");
   fprintf(fd,"path = %s\n",config.jukebox_path?config.jukebox_path:"");
-  fprintf(fd,"timeout = %d\n",(int)(config.jukebox_timeout_duration/1000000ULL));
+  fprintf(fd,"timeout = %d\n",(int)(config.jukebox_timeout_duration));
 
   fclose(fd);
 }
