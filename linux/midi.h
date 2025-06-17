@@ -22,4 +22,7 @@
 // called from floppy interrupt manager if the midi flag is on
 void midi_interrupt(void);
 
+// update midi ports on startup or after config change
+void midi_update_ports(void);
+
 #endif

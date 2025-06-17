@@ -115,6 +115,10 @@ static int handler(void* user, const char* section, const char* name, const char
     if (value) pconfig->hdd_image = strdup(value);
   } else if (MATCH("keyboard","right_alt_is_altgr")) {
     if (value) pconfig->right_alt_is_altgr = truefalse(value);
+  } else if (MATCH("midi","in")) {
+    if (value) pconfig->midi_in = strdup(value);
+  } else if (MATCH("midi","out")) {
+    if (value) pconfig->midi_out = strdup(value);
   } else if (MATCH("jukebox","enabled")) {
     if (value) pconfig->jukebox_enabled = truefalse(value);
   } else if (MATCH("jukebox","path")) {
@@ -158,6 +162,8 @@ void config_load(void) {
   config.floppy_b_write_protect = 0;
   config.hdd_image = NULL;
   config.right_alt_is_altgr = 0;
+  config.midi_in = NULL;
+  config.midi_out = NULL;
   config.jukebox_enabled = 0;
   config.jukebox_timeout_duration = 90;
   config.jukebox_path = NULL;
@@ -197,6 +203,10 @@ void config_save(void) {
 
   fprintf(fd,"\n[keyboard]\n");
   fprintf(fd,"right_alt_is_altgr = %s\n",config.right_alt_is_altgr?"true":"false");
+
+  fprintf(fd,"\n[midi]\n");
+  fprintf(fd,"in = %s\n",config.midi_in?config.midi_in:"");
+  fprintf(fd,"out = %s\n",config.midi_out?config.midi_out:"");
 
   fprintf(fd,"\n[jukebox]\n");
   fprintf(fd,"enabled = %s\n",config.jukebox_enabled?"true":"false");

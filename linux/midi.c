@@ -19,18 +19,19 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <string.h>
 #include <fcntl.h>
 #include <unistd.h>
 #include <poll.h>
 
 #include "midi.h"
-
-#define MIDI_DEVICE "/dev/snd/midiC0D0"
+#include "config.h"
 
 extern volatile uint32_t *parmreg;
 extern volatile int thr_end;
 
-static int midifd = -1;
+static int midi_in_fd = -1;
+static int midi_out_fd = -1;
 
 // called from floppy interrupt manager if the midi flag is on
 // If a character is available from the ACIA, send it to MIDI
@@ -40,7 +41,8 @@ void midi_interrupt(void) {
   if (txd_full) {
     unsigned char v = st&0xff;
     // printf("recv 0x%02x\n",(int)v);
-    write(midifd,&v,1);
+    if (midi_out_fd!=-1)
+      write(midi_out_fd,&v,1);
   }
 }
 
@@ -56,17 +58,54 @@ void midi_send(int c) {
     if (txd_full) {
       unsigned char v = st&0xff;
       // printf("recv 0x%02x\n",(int)v);
-      write(midifd,&v,1);
+      if (midi_out_fd!=-1)
+        write(midi_out_fd,&v,1);
     }
   } while (rxd_full);
   parmreg[12] = c;
 }
 
+static struct pollfd pfd = { .fd=-1, .events=POLLIN };
+
+void midi_update_ports(void) {
+  char buf[256];
+  if (midi_in_fd!=-1 && midi_in_fd==midi_out_fd) {
+    // both MIDI ports go to the same interface
+    close(midi_in_fd);
+    midi_in_fd = -1;
+    midi_out_fd = -1;
+  }
+  if (midi_in_fd!=-1) {
+    close(midi_in_fd);
+    midi_in_fd = -1;
+  }
+  if (midi_out_fd!=-1) {
+    close(midi_out_fd);
+    midi_out_fd = -1;
+  }
+  if (config.midi_in&&config.midi_out&&!strcmp(config.midi_in,config.midi_out)) {
+    // both MIDI ports go to the same interface
+    snprintf(buf,sizeof(buf),"/dev/snd/%s",config.midi_in);
+    midi_in_fd = open(buf,O_RDWR);
+    midi_out_fd = midi_in_fd;
+    pfd.fd = midi_in_fd;
+  } else {
+    if (config.midi_in) {
+      snprintf(buf,sizeof(buf),"/dev/snd/%s",config.midi_in);
+      midi_in_fd = open(buf,O_RDONLY);
+      pfd.fd = midi_in_fd;
+    }
+    if (config.midi_out) {
+      snprintf(buf,sizeof(buf),"/dev/snd/%s",config.midi_out);
+      midi_out_fd = open(buf,O_WRONLY);
+    }
+  }
+}
+
 void * thread_midi(void * arg) {
   unsigned char buf[1024];
-  midifd = open(MIDI_DEVICE,O_RDWR);
 
-  struct pollfd pfd = { .fd=midifd, .events=POLLIN };
+  midi_update_ports();
 
   for (;;) {
     int status = poll(&pfd,1,5);
@@ -77,7 +116,7 @@ void * thread_midi(void * arg) {
     } else if (status==0) {
       continue;
     }
-    int n = read(midifd,buf,1024);
+    int n = read(midi_in_fd,buf,sizeof(buf));
     int i;
     for (i=0;i<n;++i) {
       // printf("send 0x%02x\n",(int)buf[i]);
@@ -85,7 +124,9 @@ void * thread_midi(void * arg) {
     }
   }
 
-  close(midifd);
-  midifd = -1;
+  if (midi_in_fd!=-1)
+    close(midi_in_fd);
+  if (midi_out_fd!=-1)
+    close(midi_out_fd);
   return NULL;
 }

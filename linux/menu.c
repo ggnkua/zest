@@ -28,6 +28,7 @@
 #include "floppy.h"
 #include "hdd.h"
 #include "infomsg.h"
+#include "midi.h"
 
 #define WIDTH 192
 #define HEIGHT 150
@@ -81,6 +82,8 @@ static int settings(void) {
   int quit = 0;
   int selected = 0;
   int ret = 0;
+  const char *midi_in = config.midi_in;
+  const char *midi_out = config.midi_out;
   while (!quit) {
     ListView *lv = lv_new(XPOS,YPOS,WIDTH,HEIGHT,"zeST settings",menu_palette);
     int entry_height = lv_entry_height();
@@ -95,28 +98,26 @@ static int settings(void) {
     lv_add_choice(lv,"Monitor type",&config.mono,2,"PAL/NTSC","Monochrome");
     lv_add_choice(lv,"RAM size",&config.mem_size,8,"256K","512K","1M","2M","2.5M","4M","8M","14M");
     int e_turbo = lv_add_choice(lv,"Turbo mode",&config.turbo,2,"off","on");
-    lv_add_choice(lv,"Extended video modes",&config.extended_video_modes,2,"no","yes");
-    lv_add_choice(lv,"Scan doubler mode",&config.scan_doubler_mode,2,"VGA","CRT");
-    int e_wakestate = lv_add_choice(lv,"Wakestate",&config.wakestate,4,"WS1","WS2","WS3","WS4");
-    lv_add_choice(lv,"Shifter Wakestate",&config.shifter_wakestate,2,"SWS1","SWS2");
-    lv_add_file(lv,"System ROM",&config.rom_file,0,filter_img);
     lv_add_choice(lv,"Enable floppy A",&config.floppy_a_enable,2,"no","yes");
     lv_add_choice(lv,"Write protect floppy A",&config.floppy_a_write_protect,2,"no","yes");
     lv_add_choice(lv,"Enable floppy B",&config.floppy_b_enable,2,"no","yes");
     lv_add_choice(lv,"Write protect floppy B",&config.floppy_b_write_protect,2,"no","yes");
     lv_add_file(lv,"Hard disk image",&config.hdd_image,LV_FILE_EJECTABLE,filter_img);
+    lv_add_midi(lv,"MIDI in",&config.midi_in);
+    lv_add_midi(lv,"MIDI out",&config.midi_out);
+    lv_add_file(lv,"System ROM",&config.rom_file,0,filter_img);
+    lv_add_choice(lv,"Extended video modes",&config.extended_video_modes,2,"no","yes");
+    lv_add_choice(lv,"Scan doubler mode",&config.scan_doubler_mode,2,"VGA","CRT");
     lv_add_choice(lv,"Right Alt key",&config.right_alt_is_altgr,2,"Alternate","AltGr");
-    int e_save_cfg = lv_add_action(lv,"Save config");
+    int e_wakestate = lv_add_choice(lv,"Wakestate",&config.wakestate,4,"WS1","WS2","WS3","WS4");
+    lv_add_choice(lv,"Shifter Wakestate",&config.shifter_wakestate,2,"SWS1","SWS2");
     lv_choice_set_dynamic(lv,e_turbo,1);
     lv_choice_set_dynamic(lv,e_wakestate,1);
     lv_select(lv,selected);
 
     for (;;) {
       selected = lv_run(lv);
-      if (selected==e_save_cfg) {
-        config_save();
-      }
-      else if (selected==e_turbo) {
+      if (selected==e_turbo) {
         if (config.turbo && config.mem_size<5) {
           // in current version of zeST, only memory sizes of 2M, 4M and more are supported in turbo mode
           config.mem_size = config.mem_size<=3?3:5;
@@ -137,6 +138,10 @@ static int settings(void) {
       break;
     }
     lv_delete(lv);
+  }
+
+  if (midi_in!=config.midi_in||midi_out!=config.midi_out) {
+    midi_update_ports();
   }
 
   if (strcmp(config.rom_file,tmp_rom)) {
@@ -211,6 +216,7 @@ void menu(void) {
     }
     int e_settings = lv_add_action(lv,"Settings");
     int e_tools = lv_add_action(lv,"Tools");
+    int e_save_cfg = lv_add_action(lv,"Save config");
     //lv_add_action(lv,"Shutdown");
 
     int e = lv_run(lv);
@@ -236,6 +242,9 @@ void menu(void) {
     }
     else if (e==e_tools) {
       tools();
+    }
+    else if (e==e_save_cfg) {
+      config_save();
     }
   }
   if (config.floppy_a_enable) change_floppy(config.floppy_a,0);

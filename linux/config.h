@@ -58,6 +58,10 @@ typedef struct {
   // keyboard
   int right_alt_is_altgr;           // right alt = 1:Milan AltGr code, 0:Alternate
 
+  // MIDI
+  const char *midi_in;              // MIDI in port
+  const char *midi_out;             // MIDI out port
+
   // Jukebox
   int jukebox_enabled;              // Jukebox (1:on, 0: off)
   int jukebox_timeout_duration;     // How much time to run each image in jukebox mode (seconds)

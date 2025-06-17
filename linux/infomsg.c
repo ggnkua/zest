@@ -34,7 +34,6 @@
 
 /* from listview.c */
 extern Font *lv_font;
-extern int file_select_compar(const struct dirent **a, const struct dirent **b);
 extern int filter_flopimg(const struct dirent *e);
 /* from infomsg.c */
 extern uint64_t gettime(void);
@@ -188,7 +187,7 @@ void * thread_jukebox(void * arg) {
       {
         // Read directory
         struct dirent **namelist;
-        int n = scandir(config.jukebox_path,&namelist,&filter_flopimg,&file_select_compar);
+        int n = scandir(config.jukebox_path,&namelist,&filter_flopimg,alphasort);
         if (n<=0)
         {
           //infomsg_display("Error while reading jukebox directory. Jukebox off.");

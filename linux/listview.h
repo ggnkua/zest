@@ -52,6 +52,8 @@ void lv_choice_set_dynamic(ListView *v, int entry, int dynamic);
 // - LV_FILE_DIRECTORY: select a directory instead of a file
 int lv_add_file(ListView *lv, const char *title, const char **pfilename, int flags, int (*filter)(const struct dirent *));
 
+int lv_add_midi(ListView *lv, const char *title, const char **pportname);
+
 void lv_delete(ListView *lv);
 
 int lv_select(ListView *lv, int selected);

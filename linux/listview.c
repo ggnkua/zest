@@ -34,10 +34,14 @@
 #define LV_ENTRY_ACTION 1
 #define LV_ENTRY_CHOICE 2
 #define LV_ENTRY_FILE 3
+#define LV_ENTRY_MIDI 4
 
 // width of choice field in 16-pixel rasters
 #define N_RASTER_CHOICE 4
 #define N_RASTER_FILE 6
+#define N_RASTER_MIDI 8
+
+#define BUF_SIZE 256
 
 Font *lv_font;
 
@@ -71,6 +75,12 @@ struct lv_file {
   int (*filter)(const struct dirent *);
 };
 
+struct lv_midi {
+  struct lv_entry e;
+  const char **portname;
+  const char *devname;
+};
+
 struct listview {
   int xpos;
   int ypos;
@@ -86,6 +96,90 @@ struct listview {
   int capacity;
   struct lv_entry **entries;
 };
+
+// Read a single line from a file into buf; returns 1 if success, 0 if fail
+static int read_sysfs_str(const char *path, char *buf) {
+  FILE *f = fopen(path, "r");
+  if (!f) return 0;
+
+  if (!fgets(buf,BUF_SIZE,f)) {
+    fclose(f);
+    return 0;
+  }
+  fclose(f);
+  // Strip newline
+  buf[strcspn(buf,"\n")] = '\0';
+  return 1;
+}
+
+// Given the sysfs path of midi device (e.g. "/sys/class/sound/midiC1D0"),
+// try to get some strings such as USB product and manufacturer.
+// Extra items after n_str are a sequence of string identifier (key),
+// and a character pointer to write the value to. There must be n_str pairs.
+// Returns 1 on success (at least the first item is found), 0 on failure.
+static int midi_get_strings(const char *midi_sysfs_path, int n_str, ...) {
+  va_list ap;
+  va_start(ap,n_str);
+  char real_path[PATH_MAX];
+  ssize_t len = readlink(midi_sysfs_path,real_path,sizeof(real_path)-1);
+  if (len < 0) return 0;
+  real_path[len] = '\0';
+
+  // Resolve to absolute path
+  char abs_path[PATH_MAX];
+  if (!realpath(midi_sysfs_path, abs_path)) {
+    // fallback to readlink result
+    strncpy(abs_path, real_path, sizeof(abs_path));
+    abs_path[sizeof(abs_path)-1] = '\0';
+  }
+
+  // climb up the hierarchy until we find the first key
+  const char *key = va_arg(ap,const char*);
+  char *value = va_arg(ap,char *);
+  value[0] = '\0';
+  char pathbuf[PATH_MAX*2];
+  for (;;) {
+    char *slash = strrchr(abs_path, '/');
+    if (!slash) { va_end(ap); return 0; }
+    *slash = '\0';
+    snprintf(pathbuf,sizeof(pathbuf),"%s/%s",abs_path,key);
+    if (read_sysfs_str(pathbuf,value))
+      break;
+  }
+
+  // Read other keys (optional)
+  for (int i=1;i<n_str;++i) {
+    key = va_arg(ap,const char*);
+    value = va_arg(ap,char*);
+    value[0] = '\0';
+    snprintf(pathbuf,sizeof(pathbuf),"%s/%s",abs_path,key);
+    read_sysfs_str(pathbuf,value);
+  }
+  va_end(ap);
+  return 1;
+}
+
+// Produce device name from either USB product info or driver id
+static char *midi_device_name(const char *dev) {
+  char name[BUF_SIZE];
+  char sysfs_path[BUF_SIZE];
+  char product[BUF_SIZE];
+  char manufacturer[BUF_SIZE];
+
+  snprintf(sysfs_path,sizeof(sysfs_path),"/sys/class/sound/%s",dev);
+  if (midi_get_strings(sysfs_path,2,"product",product,"manufacturer",manufacturer)) {
+    if (manufacturer[0]) {
+      snprintf(name,BUF_SIZE*2,"%s %s",manufacturer,product);
+    } else {
+      strncpy(name,product,BUF_SIZE);
+    }
+  } else if (midi_get_strings(sysfs_path,1,"id",product)) {
+    strncpy(name,product,BUF_SIZE);
+  } else {
+    name[0] = '\0';
+  }
+  return name[0]?strdup(name):NULL;
+}
 
 static int add_entry(ListView *lv,int type,const char *title,struct lv_entry *e) {
   if (lv->n_entries==lv->capacity) {
@@ -144,6 +238,10 @@ void lv_delete(ListView *lv) {
       case LV_ENTRY_FILE:
         //struct lv_file *fl = (struct lv_file*)e;
         break;
+      case LV_ENTRY_MIDI:
+        struct lv_midi *md = (struct lv_midi*)e;
+        free((char*)md->devname);
+        break;
       }
       free((char*)e->title);
       free(e);
@@ -197,6 +295,18 @@ int lv_add_file(ListView *lv, const char *title, const char **pfilename, int fla
   return add_entry(lv,LV_ENTRY_FILE,title,(struct lv_entry*)fi);
 }
 
+// add entry with a midi port to select
+int lv_add_midi(ListView *lv, const char *title, const char **pportname) {
+  struct lv_midi *e = malloc(sizeof(struct lv_midi));
+  e->portname = pportname;
+  if (*pportname) {
+    e->devname = midi_device_name(*pportname);
+  } else {
+    e->devname = NULL;
+  }
+  return add_entry(lv,LV_ENTRY_MIDI,title,(struct lv_entry*)e);
+}
+
 static void display_entry(ListView *lv, int line_no) {
   int raster_count = lv->width/16;
   int font_height = font_get_height(lv_font);
@@ -225,6 +335,18 @@ static void display_entry(ListView *lv, int line_no) {
     }
     font_render_text(lv_font,bitmap,raster_count,2,font_height,(raster_count-N_RASTER_FILE)*16,0,e->title);
     font_render_text_centered(lv_font,bitmap+raster_count-N_RASTER_FILE,raster_count,2,font_height,N_RASTER_FILE*16,filename?filename:"<empty>");
+    break;
+  }
+  case LV_ENTRY_MIDI: {
+    const struct lv_midi *md = (struct lv_midi*)e;
+    const char *portname = *md->portname;
+    char buf[BUF_SIZE];
+    if (md->devname) {
+      snprintf(buf,BUF_SIZE,"%s: %s",portname+4,md->devname);
+    }
+    font_render_text(lv_font,bitmap,raster_count,2,font_height,(raster_count-N_RASTER_MIDI)*16,0,e->title);
+    font_render_text_centered(lv_font,bitmap+raster_count-N_RASTER_MIDI,raster_count,2,font_height,N_RASTER_MIDI*16,md->devname?buf:portname?portname+4:"<disconnected>");
+    break;
   }
   }
 }
@@ -243,7 +365,8 @@ static void highlight(ListView *lv, int line_no, int highlight) {
     }
   } else {
     int i,y;
-    int beg = raster_count-(e->type==LV_ENTRY_CHOICE ? N_RASTER_CHOICE : N_RASTER_FILE);
+    int n_raster = e->type==LV_ENTRY_CHOICE?N_RASTER_CHOICE:e->type==LV_ENTRY_FILE?N_RASTER_FILE:N_RASTER_MIDI;
+    int beg = raster_count-n_raster;
     uint32_t *bitmap = osd_bitmap+raster_count*font_height*(line_no+1);
     for (y=0;y<font_height;++y) {
       for (i=beg;i<raster_count;++i) {
@@ -335,7 +458,7 @@ int lv_select(ListView *lv, int selected) {
   return lv->selected;
 }
 
-int file_select_compar(const struct dirent **a, const struct dirent **b) {
+static int file_select_compar(const struct dirent **a, const struct dirent **b) {
   // directories should come before files
   if ((*a)->d_type==DT_DIR && (*b)->d_type!=DT_DIR) {
     return -1;
@@ -433,6 +556,55 @@ static const char *file_select(int xpos, int ypos, int width, int height, const 
 
   if (ret==-1) return NULL;
   return strdup(directory);
+}
+
+static int midi_filter(const struct dirent *e) {
+  if (e->d_type==DT_DIR)
+    return 0;
+  if (strncmp(e->d_name,"midiC",5))
+    return 0;
+  return 1;
+}
+
+const char *midi_select(int xpos, int ypos, int width, int height, const char *title, const char *init_val, const uint32_t *palette) {
+  char port[256];
+  struct dirent **namelist;
+  int n = scandir("/dev/snd",&namelist,midi_filter,alphasort);
+  if (n==0) return NULL;
+  int i;
+  ListView *lv = lv_new(xpos,ypos,width,height,title,palette);
+  int entry_height = lv_entry_height();
+  uint32_t gradient_header[entry_height];
+  gradient(gradient_header,entry_height,0x79de07,0x488c14);
+  for (i=0;i<entry_height;++i) {
+    lv_set_colour_change(lv,i,1,gradient_header[i]);
+  }
+  lv_set_colour_change(lv,entry_height,1,palette[1]);
+  for (i=0;i<n;++i) {
+    const char *name = namelist[i]->d_name;
+    char *devname = midi_device_name(name);
+    if (devname) {
+      char buf[BUF_SIZE];
+      snprintf(buf,BUF_SIZE,"%s: %s",name+4,devname);
+      lv_add_action(lv,buf);
+    } else {
+      lv_add_action(lv,name+4);
+    }
+    if (init_val&&!strcmp(init_val,namelist[i]->d_name)) {
+      lv_select(lv,i);
+    }
+  }
+  int ret = lv_run(lv);
+  if (ret>=0) {
+    strncpy(port,namelist[ret]->d_name,sizeof(port));
+  }
+
+  for (i=0;i<n;++i) {
+    free(namelist[i]);
+  }
+  free(namelist);
+  if (ret==-1) return NULL;
+  return strdup(port);
 }
 
 static void lv_draw(ListView *lv) {
@@ -574,6 +746,23 @@ int lv_run(ListView *lv) {
               }
             }
           }
+          else if (e->type==LV_ENTRY_MIDI) {
+            struct lv_midi *md = (struct lv_midi*)e;
+            if (md->portname) {
+              char *p = (char*)(*md->portname);
+              if (p) {
+                osd_hide();
+                free(p);
+                *md->portname = NULL;
+                if (md->devname) {
+                  free((char*)md->devname);
+                  md->devname = NULL;
+                }
+                lv_draw(lv);
+                osd_show();
+              }
+            }
+          }
           break;
         case KEY_ENTER:
         case BTN_SOUTH:
@@ -589,6 +778,19 @@ int lv_run(ListView *lv) {
             if (name) {
               free((void*)*lf->filename);
               *lf->filename = name;
+            }
+            lv_draw(lv);
+            osd_show();
+          }
+          else if (e->type==LV_ENTRY_MIDI) {
+            struct lv_midi *md = (struct lv_midi*)e;
+            osd_hide();
+            const char *name = midi_select(lv->xpos,lv->ypos,lv->width,lv->height,e->title,*md->portname,lv->palette);
+            if (name) {
+              free((void*)*md->portname);
+              *md->portname = name;
+              free((char*)md->devname);
+              md->devname = midi_device_name(name);
             }
             lv_draw(lv);
             osd_show();
