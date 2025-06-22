@@ -173,7 +173,7 @@ begin
 	tco <= tcto;
 	tdo <= tdto;
 	irqn <= sirqn;
-	dtackn <= (dtackn_irq and dtackn_reg) or dsn;
+	dtackn <= (dtackn_irq and (dtackn_reg or csn)) or dsn;
 	od <= sod when csn = '0' or iackn = '0' else x"ff";
 
 	process(intv,vr,ipl,isr_ipl,dtackn_irq)
