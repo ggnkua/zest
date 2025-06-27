@@ -55,7 +55,7 @@ Quit the root session and go back to your normal user session.
 Issue those commands:
 
     $ cd $HOME/src
-    $ git clone --depth=1 --recursive https://github.com/zerkman/zest.git
+    $ git clone --depth=1 --recursive https://codeberg.org/zerkman/zest.git
 
 # Automatically build everything
 

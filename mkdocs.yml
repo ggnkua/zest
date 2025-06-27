@@ -1,0 +1,12 @@
+site_name: zeST
+nav:
+    - Home: index.md
+    - Getting started: getting-started.md
+    - User Guide:
+        - general_use.md
+        - config_file.md
+        - drivers.md
+        - linux.md
+        - zynqberry_setup.md
+
+#theme: readthedocs
