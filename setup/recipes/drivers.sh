@@ -17,7 +17,7 @@ cd $ZEST_SETUP/output/drivers
 
 # keyboard driver
 if [ ! -d zkbd ] ; then
-    git clone https://github.com/zerkman/zkbd.git || exit $?
+    git clone https://codeberg.org/zerkman/zkbd.git || exit $?
 fi
 cd zkbd
 git pull
