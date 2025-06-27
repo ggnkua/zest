@@ -210,10 +210,10 @@ begin
 					err <= '1';
 				end if;
 				if new_phase = '1' or delay = '1' then		-- 32 MHz clock
-					-- 32*2400/31333 ~= 2.451 MHz
-					if cnt24+2400 >= 31333 then
+					-- 32*2400/31334 ~= 2.451 MHz
+					if cnt24+2400 >= 31334 then
 						en24 <= '1';
-						cnt24 <= cnt24 + 2400 - 31333;
+						cnt24 <= cnt24 + 2400 - 31334;
 					else
 						cnt24 <= cnt24 + 2400;
 					end if;
