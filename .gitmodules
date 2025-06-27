@@ -3,4 +3,4 @@
 	url = https://github.com/ijor/fx68k.git
 [submodule "hdl/zhdmi"]
 	path = hdl/zhdmi
-	url = https://github.com/zerkman/zhdmi.git
+	url = https://codeberg.org/zerkman/zhdmi.git
