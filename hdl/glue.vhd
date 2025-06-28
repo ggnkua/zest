@@ -372,6 +372,25 @@ begin
 	end if;
 end process;
 
+process(srturbo,iRWn,turboram_r_done,turboram_w_done,turbosyn,mem_over,mem_err,srom,rom_r_done)
+begin
+	trdtackn <= '1';
+	if srturbo = '1' then
+		-- DTACKn for turbo mode RAM accesses
+		if iRWn = '1' and turboram_r_done = '1' then
+			trdtackn <= '0';
+		end if;
+		if iRwn = '0' and turboram_w_done = '1' then
+			trdtackn <= '0';
+		end if;
+	elsif turbosyn = '1' and mem_over = '1' and mem_err = '0' then
+		trdtackn <= '0';
+	elsif turbosyn = '1' and srom = '1' then
+		if rom_r_done = '1' then
+			trdtackn <= '0';
+		end if;
+	end if;
+end process;
 
 -- peripheral register access
 process(clk,resetn)
@@ -380,25 +399,8 @@ begin
 		oD <= (others => '1');
 		ymdtackn <= '1';
 		sdtackn <= '1';
-		trdtackn <= '1';
 		dma_w <= '0';
 	elsif rising_edge(clk) then
-		trdtackn <= '1';
-		if srturbo = '1' then
-			-- DTACKn for turbo mode RAM accesses
-			if iRWn = '1' and turboram_r_done = '1' then
-				trdtackn <= '0';
-			end if;
-			if iRwn = '0' and turboram_w_done = '1' then
-				trdtackn <= '0';
-			end if;
-		elsif turbosyn = '1' and mem_over = '1' and mem_err = '0' then
-			trdtackn <= '0';
-		elsif turbosyn = '1' and srom = '1' then
-			if rom_r_done = '1' then
-				trdtackn <= '0';
-			end if;
-		end if;
 		if en8rck = '1' then
 			oD <= (others => '1');
 			sdtackn <= '1';
