@@ -268,29 +268,30 @@ pal <= pal_ff;
 mem_over <= '1' when unsigned(iA(23 downto 18)) > unsigned(cfg_memtop) else '0';
 mem_err <= mem_over when iA(23 downto 22) /= "00" else '0';
 
+-- asynchronous memory access signals for turbo mode to minimise cycles
+rom_r <= srom;
+turboram_r <= srturbo and iRWn;
+process(srturbo,iRWn,mem_over,iUDSn,iLDSn)
+begin
+	if srturbo = '1' and iRwn = '0' and mem_over = '0' then
+		turboram_w <= '1';
+		turboram_ds <= not (iUDSn, iLDSn);
+	else
+		turboram_w <= '0';
+		turboram_ds <= "00";
+	end if;
+end process;
+
 process(clk,resetn)
 begin
 	if resetn = '0' then
 		DMAn <= '1';
 		RAMn <= '1';
-		rom_r <= '0';
-		turboram_r <= '0';
-		turboram_w <= '0';
-		turboram_ds <= "00";
 		asn_ff <= '1';
 	elsif rising_edge(clk) then
 		DMAn <= sdma;
 		RAMn <= sram;
-		rom_r <= srom;
-		turboram_r <= srturbo and iRWn;
 		asn_ff <= iASn;
-		if srturbo = '1' and iRwn = '0' and mem_over = '0' then
-			turboram_w <= '1';
-			turboram_ds <= not (iUDSn, iLDSn);
-		else
-			turboram_w <= '0';
-			turboram_ds <= "00";
-		end if;
 	end if;
 end process;
 
