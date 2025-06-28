@@ -35,19 +35,20 @@ end cache_block;
 
 architecture behavioral of cache_block is
 	type mem_t is array (2**ADDR_WIDTH-1 downto 0) of std_logic_vector(DATA_WIDTH-1 downto 0);
-	signal mem : mem_t;
+	shared variable mem	: mem_t;
+	signal r_addr		: integer range 0 to 2**ADDR_WIDTH-1;
 
 begin
+
+dout <= mem(r_addr);
 
 process(clk)
 begin
 	if rising_edge(clk) then
 		if en = '1' then
+			r_addr <= to_integer(unsigned(addr));
 			if we = '1' then
-				mem(to_integer(unsigned(addr))) <= din;
-				dout <= din;
-			else
-				dout <= mem(to_integer(unsigned(addr)));
+				mem(to_integer(unsigned(addr))) := din;
 			end if;
 		end if;
 	end if;
@@ -94,7 +95,6 @@ begin
 		);
 	end generate;
 end architecture;
-
 
 library ieee;
 use ieee.std_logic_1164.all;
@@ -242,14 +242,16 @@ end mem_if_axi;
 architecture implementation of mem_if_axi is
 	-- cache signals
 	type cline_state_t is (EMPTY,VALID,RES1,RES2);
-	type rd_state_t is (INIT,CLEAR,IDLE,READ_CACHE1,READ_CACHE2,READ_BURST1,READ_BURST2,READ_BURST3,WRITE_CACHE1,WRITE_CACHE2,WRITE_END);
+	type rd_state_t is (INIT,CLEAR,IDLE,READ_CACHE,READ_BURST1,READ_BURST2,WRITE_CACHE,WRITE_END);
 	constant C_ADDR_WIDTH : integer := 9;
 	signal c_addr	: std_logic_vector(C_ADDR_WIDTH-1 downto 0);
+	signal c_addr_i	: std_logic_vector(C_ADDR_WIDTH-1 downto 0);
 	signal c_en		: std_logic;
 	signal c_we		: std_logic;
 	signal c_iline	: std_logic_vector(288-1 downto 0);
 	signal c_oline	: std_logic_vector(288-1 downto 0);
 	signal ir_done	: std_logic_vector(NUM_PORTS-1 downto 0);
+	signal iw_done	: std_logic_vector(NUM_PORTS-1 downto 0);
 	signal r_wait	: std_logic_vector(NUM_PORTS-1 downto 0);
 	-- line ID = address[C_ADDR_WIDTH+5-1:5]
 	-- line format:
@@ -263,6 +265,7 @@ architecture implementation of mem_if_axi is
 	signal r_burst_cnt	: integer range 0 to 7;
 
 	signal pt_id		: integer range 0 to NUM_PORTS-1;
+	signal pt_id0		: integer range 0 to NUM_PORTS-1;
 	signal pt_a			: std_logic_vector(31 downto 0);
 	signal pt_ds		: std_logic_vector(3 downto 0);
 	signal pt_w_d		: std_logic_vector(31 downto 0);
@@ -321,6 +324,7 @@ begin
 	pt_w_d <= w_d(32*pt_id+31 downto 32*pt_id);
 	pt_ds <= ds(4*pt_id+3 downto 4*pt_id);
 	r_done <= ir_done;
+	w_done <= iw_done;
 	r_wait <= r and not ir_done;
 
 	--I/O Connections. Write Address (AW)
@@ -375,16 +379,43 @@ begin
 	line_addr <= c_oline(256+32-C_ADDR_WIDTH-5-1 downto 256);
 	r_idx <= to_integer(unsigned(pt_a(4 downto 2)));
 
-	process(m_axi_aclk,m_axi_aresetn)
+	process(pt_id,r_wait,w)
 		variable pid	: integer range 0 to NUM_PORTS-1;
 		variable npid	: integer range 0 to NUM_PORTS-1;
+	begin
+		pid := 0;
+		for i in 0 to NUM_PORTS-1 loop
+			if i + pt_id < NUM_PORTS then
+				npid := i + pt_id;
+			else
+				npid := i + pt_id - NUM_PORTS;
+			end if;
+			if r_wait(npid) = '1' or w(npid) = '1' then
+				pid := npid;
+			end if;
+		end loop;
+		pt_id0 <= pid;
+	end process;
+
+	process(rd_state,c_addr_i,a,pt_id,pt_id0)
+	begin
+		if rd_state = INIT or rd_state = CLEAR then
+			c_addr <= c_addr_i;
+		elsif rd_state = IDLE then
+			c_addr <= a(pt_id0*32+C_ADDR_WIDTH+5-1 downto pt_id0*32+5);
+		else
+			c_addr <= a(pt_id*32+C_ADDR_WIDTH+5-1 downto pt_id*32+5);
+		end if;
+	end process;
+
+	process(m_axi_aclk,m_axi_aresetn)
 		variable v_wrel	: std_logic := '0';
 	begin
 		if m_axi_aresetn = '0' then
 			axi_rready <= '0';
 			rd_state <= INIT;
 			c_iline <= (others => '0');
-			c_addr <= (others => '0');
+			c_addr_i <= (others => '0');
 			c_en <= '0';
 			c_we <= '0';
 			r_d <= (others => '0');
@@ -397,14 +428,16 @@ begin
 			axi_wstrb <= (others => '0');
 			axi_awaddr <= (others => '0');
 			axi_awvalid <= '0';
-			w_done <= (others => '0');
+			iw_done <= (others => '0');
 			pt_id <= 0;
 			v_wrel := '0';
 		elsif rising_edge(m_axi_aclk) then
 			for i in 0 to NUM_PORTS-1 loop
 				if ir_done(i) = '1' and r(i) = '0' then
-					-- r_d(i*32+31 downto i*32) <= (others => '0');
 					ir_done(i) <= '0';
+				end if;
+				if iw_done(i) = '1' and w(i) = '0' then
+					iw_done(i) <= '0';
 				end if;
 			end loop;
 			case rd_state is
@@ -414,40 +447,21 @@ begin
 					rd_state <= CLEAR;
 				when CLEAR =>
 					if unsigned(c_addr) /= 2**C_ADDR_WIDTH-1 then
-						c_addr <= std_logic_vector(unsigned(c_addr) + 1);
+						c_addr_i <= std_logic_vector(unsigned(c_addr_i) + 1);
 					else
-						c_en <= '0';
 						c_we <= '0';
-						c_addr <= (others => '0');
 						rd_state <= IDLE;
 					end if;
 				when IDLE =>
 					if r_wait /= (NUM_PORTS-1 downto 0 => '0') or w /= (NUM_PORTS-1 downto 0 => '0') then
-						pid := 0;
-						for i in 0 to NUM_PORTS-1 loop
-							if i + pt_id < NUM_PORTS then
-								npid := i + pt_id;
-							else
-								npid := i + pt_id - NUM_PORTS;
-							end if;
-							if r_wait(npid) = '1' or w(npid) = '1' then
-								pid := npid;
-							end if;
-						end loop;
-						pt_id <= pid;
-						c_addr <= a(pid*32+C_ADDR_WIDTH+5-1 downto pid*32+5);
-						c_en <= '1';
-						if r_wait(pid) = '1' then
-							rd_state <= READ_CACHE1;
+						pt_id <= pt_id0;
+						if r_wait(pt_id0) = '1' then
+							rd_state <= READ_CACHE;
 						else
-							rd_state <= WRITE_CACHE1;
+							rd_state <= WRITE_CACHE;
 						end if;
 					end if;
-				when READ_CACHE1 =>
-					c_addr <= (others => '0');
-					c_en <= '0';
-					rd_state <= READ_CACHE2;
-				when READ_CACHE2 =>
+				when READ_CACHE =>
 					if line_state = VALID and line_addr = pt_a(31 downto C_ADDR_WIDTH+5) then
 						r_d(pt_id*32+31 downto pt_id*32) <= c_oline(r_idx*32+31 downto r_idx*32);
 						ir_done(pt_id) <= '1';
@@ -468,8 +482,6 @@ begin
 						if r_burst_cnt = 7 then
 							c_iline(288-1 downto 288-2) <= std_logic_vector(to_unsigned(cline_state_t'pos(VALID),2));
 							c_iline(256+32-C_ADDR_WIDTH-5-1 downto 256) <= pt_a(31 downto C_ADDR_WIDTH+5);
-							c_addr <= pt_a(C_ADDR_WIDTH+5-1 downto 5);
-							c_en <= '1';
 							c_we <= '1';
 							axi_rready <= '0';
 							rd_state <= READ_BURST2;
@@ -478,47 +490,36 @@ begin
 						end if;
 					end if;
 				when READ_BURST2 =>
-					c_addr <= (others => '0');
-					c_en <= '0';
 					c_we <= '0';
-					rd_state <= READ_BURST3;
-				when READ_BURST3 =>
-					r_d(pt_id*32+31 downto pt_id*32) <= c_oline(r_idx*32+31 downto r_idx*32);
+					r_d(pt_id*32+31 downto pt_id*32) <= c_iline(r_idx*32+31 downto r_idx*32);
 					ir_done(pt_id) <= '1';
 					rd_state <= IDLE;
-				when WRITE_CACHE1 =>
+				when WRITE_CACHE =>
 					v_wrel := '0';
-					c_addr <= (others => '0');
-					c_en <= '0';
-					rd_state <= WRITE_CACHE2;
-				when WRITE_CACHE2 =>
-					if line_state = VALID and line_addr = pt_a(31 downto C_ADDR_WIDTH+5) then
-						c_iline <= c_oline;
-						for i in 0 to 3 loop
-							if pt_ds(i) = '1' then
-								c_iline(r_idx*32+i*8+7 downto r_idx*32+i*8) <= pt_w_d(i*8+7 downto i*8);
-							end if;
-						end loop;
-						c_addr <= pt_a(C_ADDR_WIDTH+5-1 downto 5);
-						c_en <= '1';
-						c_we <= '1';
+					if pt_ds /= "0000" then
+						if line_state = VALID and line_addr = pt_a(31 downto C_ADDR_WIDTH+5) then
+							c_iline <= c_oline;
+							for i in 0 to 3 loop
+								if pt_ds(i) = '1' then
+									c_iline(r_idx*32+i*8+7 downto r_idx*32+i*8) <= pt_w_d(i*8+7 downto i*8);
+								end if;
+							end loop;
+							c_we <= '1';
+						end if;
+						axi_awaddr <= pt_a(31 downto 2) & "00";
+						axi_awvalid <= '1';
+						axi_wdata <= pt_w_d;
+						axi_wstrb <= pt_ds;
+						axi_wlast <= '1';
+						axi_wvalid <= '1';
+						axi_bready <= '1';
+						iw_done(pt_id) <= '1';
+						rd_state <= WRITE_END;
 					end if;
-					axi_awaddr <= pt_a(31 downto 2) & "00";
-					axi_awvalid <= '1';
-					axi_wdata <= pt_w_d;
-					axi_wstrb <= pt_ds;
-					axi_wlast <= '1';
-					axi_wvalid <= '1';
-					axi_bready <= '1';
-					w_done(pt_id) <= '1';
-					rd_state <= WRITE_END;
 				when WRITE_END =>
-					c_addr <= (others => '0');
-					c_en <= '0';
 					c_we <= '0';
 					if w(pt_id) = '0' then
 						v_wrel := '1';
-						w_done(pt_id) <= '0';
 					end if;
 					if m_axi_awready = '1' then
 						axi_awaddr <= (others => '0');
