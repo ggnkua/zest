@@ -245,6 +245,7 @@ architecture implementation of mem_if_axi is
 	type rd_state_t is (INIT,CLEAR,IDLE,READ_CACHE,READ_BURST1,READ_BURST2,WRITE_CACHE,WRITE_END);
 	constant C_ADDR_WIDTH : integer := 9;
 	signal c_addr	: std_logic_vector(C_ADDR_WIDTH-1 downto 0);
+	signal c_addr1	: std_logic_vector(C_ADDR_WIDTH-1 downto 0);
 	signal c_addr_i	: std_logic_vector(C_ADDR_WIDTH-1 downto 0);
 	signal c_en		: std_logic;
 	signal c_we		: std_logic;
@@ -320,7 +321,6 @@ begin
 			we => c_we
 		);
 
-	pt_a <= a(32*pt_id+31 downto 32*pt_id);
 	pt_w_d <= w_d(32*pt_id+31 downto 32*pt_id);
 	pt_ds <= ds(4*pt_id+3 downto 4*pt_id);
 	r_done <= ir_done;
@@ -404,7 +404,7 @@ begin
 		elsif rd_state = IDLE then
 			c_addr <= a(pt_id0*32+C_ADDR_WIDTH+5-1 downto pt_id0*32+5);
 		else
-			c_addr <= a(pt_id*32+C_ADDR_WIDTH+5-1 downto pt_id*32+5);
+			c_addr <= c_addr1;
 		end if;
 	end process;
 
@@ -453,8 +453,11 @@ begin
 						rd_state <= IDLE;
 					end if;
 				when IDLE =>
+					c_we <= '0';
 					if r_wait /= (NUM_PORTS-1 downto 0 => '0') or w /= (NUM_PORTS-1 downto 0 => '0') then
 						pt_id <= pt_id0;
+						pt_a <= a(32*pt_id0+31 downto 32*pt_id0);
+						c_addr1 <= c_addr;
 						if r_wait(pt_id0) = '1' then
 							rd_state <= READ_CACHE;
 						else
@@ -479,6 +482,10 @@ begin
 					end if;
 					if m_axi_rvalid = '1' then
 						c_iline(255 downto 0) <= m_axi_rdata & c_iline(255 downto 32);
+						if r_burst_cnt = r_idx then
+							r_d(pt_id*32+31 downto pt_id*32) <= m_axi_rdata;
+							ir_done(pt_id) <= '1';
+						end if;
 						if r_burst_cnt = 7 then
 							c_iline(288-1 downto 288-2) <= std_logic_vector(to_unsigned(cline_state_t'pos(VALID),2));
 							c_iline(256+32-C_ADDR_WIDTH-5-1 downto 256) <= pt_a(31 downto C_ADDR_WIDTH+5);
@@ -491,8 +498,6 @@ begin
 					end if;
 				when READ_BURST2 =>
 					c_we <= '0';
-					r_d(pt_id*32+31 downto pt_id*32) <= c_iline(r_idx*32+31 downto r_idx*32);
-					ir_done(pt_id) <= '1';
 					rd_state <= IDLE;
 				when WRITE_CACHE =>
 					v_wrel := '0';
