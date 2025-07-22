@@ -14,6 +14,13 @@
 -- You should have received a copy of the GNU General Public License
 -- along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+-- This implementation was based on:
+-- - Western Digital's original WD177X-00 data sheet
+-- - Its edited version by Jean Louis-Guérin (DrCoolZic), V1.3 - January 2015
+-- - "All you always wanted to know about the WD1772" post by DrCoolZic:
+--   https://www.atari-forum.com/viewtopic.php?t=27448
+-- - Trial and error running many Atari ST demos with various loaders
+
 library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
