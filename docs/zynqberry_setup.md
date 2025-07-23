@@ -109,6 +109,4 @@ The QSPI ROM should now be configured.
 If you left the board in QSPI boot mode, you may have a warning message telling you that flash programming
 is not supported, but from my expericence it works correctly.
 
-Now you can follow the [regular installation procedure](/getting-started/#installation) to finish the installation.
-
-
+Now you can follow the [regular installation procedure](/doc/getting-started/#installation) to finish the installation.

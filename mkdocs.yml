@@ -1,4 +1,5 @@
 site_name: zeST
+site_url: https://zest.sector1.fr/doc/
 nav:
     - Home: index.md
     - Getting started: getting-started.md
