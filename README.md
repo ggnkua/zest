@@ -1,13 +1,17 @@
 # zeST - An implementation of an Atari ST in VHDL
 
-Copyright (c) 2019-2024 by François Galea (fgalea à free.fr)
+Copyright (c) 2019-2025 by François Galea (fgalea à free.fr)
 
 This is a complete implementation of an Atari ST in VHDL, which targets cheap Xilinx Zynq-7000-based prototyping boards.
 
 Its main features are:
-- Cycle accuracy, whenever possible (and necessary)
+- Cycle accuracy, including CPU and display (demos work great!)
 - HDMI for video and audio output
-- USB for keyboard, mouse input (planned: joysticks, mass storage, MIDI...).
+- USB for keyboard, mouse input, joysticks, MIDI
+- "Accurate enough" floppy drive emulation with support for any format the disk controller can write (not read)
+- ACSI hard drive emulation
+- Switchable wakestates
+- Optional 50 MHz turbo mode
 
 External hardware cores zeST is based on:
 - Jorge Cwik's [fx68k](https://github.com/ijor/fx68k.git) processor core, a cycle-accurate 68000 processor implementation
@@ -27,4 +31,4 @@ See the LICENSE file or https://www.gnu.org/licenses/gpl-3.0.html for more detai
 ## Links
 
 - [Main project page](https://zest.sector1.fr)
-- [Project building instructions](doc/build.md)
+- [Project building instructions](docs/build.md)
