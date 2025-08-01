@@ -53,7 +53,7 @@ typedef struct {
   int floppy_b_write_protect;       // B: write protect (1:on, 0:off)
 
   // hard disk
-  const char *hdd_image;            // Hard disk image
+  const char *acsi[8];              // Hard disk images
 
   // keyboard
   int right_alt_is_altgr;           // right alt = 1:Milan AltGr code, 0:Alternate

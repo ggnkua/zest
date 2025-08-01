@@ -73,11 +73,8 @@ static int filter_directory(const struct dirent *e) {
 static int settings(void) {
   char tmp_rom[1024] = {0};
   if (config.rom_file) strcpy(tmp_rom,config.rom_file);
-  char tmp_hdd[1024] = {0};
-  if (config.hdd_image) strcpy(tmp_hdd,config.hdd_image);
   int mem_size = config.mem_size;
   int mono = config.mono;
-  int hdd_set = config.hdd_image!=NULL;
 
   int quit = 0;
   int selected = 0;
@@ -102,7 +99,6 @@ static int settings(void) {
     lv_add_choice(lv,"Write protect floppy A",&config.floppy_a_write_protect,2,"no","yes");
     lv_add_choice(lv,"Enable floppy B",&config.floppy_b_enable,2,"no","yes");
     lv_add_choice(lv,"Write protect floppy B",&config.floppy_b_write_protect,2,"no","yes");
-    lv_add_file(lv,"Hard disk image",&config.hdd_image,LV_FILE_EJECTABLE,filter_img);
     lv_add_midi(lv,"MIDI in",&config.midi_in);
     lv_add_midi(lv,"MIDI out",&config.midi_out);
     lv_add_file(lv,"System ROM",&config.rom_file,0,filter_img);
@@ -148,9 +144,6 @@ static int settings(void) {
     load_rom(config.rom_file);
     ret = 1;
   }
-  hdd_changeimg(config.hdd_image);
-  if (hdd_set!=(config.hdd_image!=NULL)) ret = 1;
-  if (hdd_set&&strcmp(config.hdd_image,tmp_hdd)) ret = 1;
 
   if (config.turbo && config.mem_size<5 && config.mem_size!=3) {
     // if turbo mode was changed and memory size is not 2M or 4M+ (linear memory mapping)
@@ -191,6 +184,46 @@ static int tools(void) {
   return 0;
 }
 
+static int hard_disks(void) {
+  char tmp_hdd[8][1024] = {0};
+  int i;
+  int hdd_set = 0;
+  for (i=0;i<8;++i) {
+    if (config.acsi[i]) {
+      strcpy(tmp_hdd[i],config.acsi[i]);
+      hdd_set |= 1<<i;
+    }
+  }
+  ListView *lv = lv_new(XPOS,YPOS,WIDTH,HEIGHT,"zeST hard disks",menu_palette);
+  int entry_height = lv_entry_height();
+  uint32_t gradient_header[entry_height];
+  gradient(gradient_header,entry_height,0x0000ff00,0xc0ff00);
+  for (i=0;i<entry_height;++i) {
+    lv_set_colour_change(lv,i,1,gradient_header[i]);
+  }
+  lv_set_colour_change(lv,entry_height,1,menu_palette[1]);
+  for (i=0;i<8;++i) {
+    char buf[256];
+    sprintf(buf,"ACSI %d",i);
+    lv_add_file(lv,buf,&config.acsi[i],LV_FILE_EJECTABLE,filter_img);
+  }
+  lv_run(lv);
+
+  int ret = 0;
+  int hdd_set2 = 0;
+  for (i=0;i<8;++i) {
+    hdd_changeimg(i,config.acsi[i]);
+    if (config.acsi[i]) {
+      if (strcmp(config.acsi[i],tmp_hdd[i])) ret = 1;
+      hdd_set2 |= 1<<i;
+    }
+  }
+  if (hdd_set2!=hdd_set) {
+    ret = 1;
+  }
+  return ret;
+}
+
 void menu(void) {
   int quit = 0;
   infomsg_pause(1);
@@ -214,6 +247,7 @@ void menu(void) {
     if (config.floppy_b_enable) {
       lv_add_file(lv,"Floppy B",&config.floppy_b,LV_FILE_EJECTABLE,filter_flopimg);
     }
+    int e_hard_disks = lv_add_action(lv,"Hard disks");
     int e_settings = lv_add_action(lv,"Settings");
     int e_tools = lv_add_action(lv,"Tools");
     int e_save_cfg = lv_add_action(lv,"Save config");
@@ -231,6 +265,12 @@ void menu(void) {
     else if (e==e_coldreset) {
       cold_reset();
       quit = 1;
+    }
+    else if (e==e_hard_disks) {
+      if (hard_disks()) {
+        cold_reset();
+        quit = 1;
+      }
     }
     else if (e==e_settings) {
       if (settings()) {

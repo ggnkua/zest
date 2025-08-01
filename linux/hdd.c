@@ -42,62 +42,60 @@
 static volatile uint32_t *acsireg;
 static volatile uint32_t *iobuf;
 
-static int hdd_dev_id = 0;
-
-static struct {
+static struct __acsi_disk {
   int fd;           // disk image file handle
   int sectors;      // number of sectors
   unsigned int lba; // current logical block address
   unsigned int sense;
   int report_lba;   // report LBA in sense data
-} img;
+} acsi_disk[8];
 
-static void clear_sense_data(void) {
-  img.sense = 0;
-  img.report_lba = 0;
+static void clear_sense_data(int acsi_id) {
+  acsi_disk[acsi_id].sense = 0;
+  acsi_disk[acsi_id].report_lba = 0;
 }
 
-static void set_error(unsigned int err, int report_lba) {
-  img.sense = err;
-  img.report_lba = report_lba;
-  *acsireg = STATUS_ERROR;
-}
-
-static void openimg(const char *filename) {
+static void openimg(int acsi_id, const char *filename) {
   if (filename) {
-    img.fd = open(filename,O_RDWR);
-    if (img.fd==-1) {
+    acsi_disk[acsi_id].fd = open(filename,O_RDWR);
+    if (acsi_disk[acsi_id].fd==-1) {
       printf("could not open HDD image file `%s`\n",filename);
       return;
     }
-    off_t size = lseek(img.fd,0,SEEK_END);
-    img.sectors = size/512;
-    lseek(img.fd,0,SEEK_SET);
+    off_t size = lseek(acsi_disk[acsi_id].fd,0,SEEK_END);
+    acsi_disk[acsi_id].sectors = size/512;
+    lseek(acsi_disk[acsi_id].fd,0,SEEK_SET);
   }
 }
 
-static void closeimg(void) {
-  if (img.fd!=-1) {
-    close(img.fd);
+static void closeimg(int acsi_id) {
+  if (acsi_disk[acsi_id].fd!=-1) {
+    close(acsi_disk[acsi_id].fd);
   }
-  img.fd = -1;
+  acsi_disk[acsi_id].fd = -1;
 }
 
-void hdd_changeimg(const char *full_pathname) {
-  closeimg();
-  openimg(full_pathname);
+void hdd_changeimg(int acsi_id, const char *full_pathname) {
+  closeimg(acsi_id);
+  openimg(acsi_id, full_pathname);
 }
 
 void hdd_init(volatile uint32_t *parmreg) {
+  int i;
   acsireg = (void*)(((uint8_t*)parmreg)+0x4000);
   iobuf = acsireg + (0x800/4);
-  img.fd = -1;
-  openimg(config.hdd_image);
-  clear_sense_data();
+  for (i=0;i<8;++i) {
+    acsi_disk[i].fd = -1;
+    openimg(i,config.acsi[i]);
+    clear_sense_data(i);
+  }
 }
 
 void hdd_exit(void) {
-  closeimg();
+  int i;
+  for (i=0;i<8;++i) {
+    closeimg(i);
+  }
 }
 
 static unsigned char command[10];
@@ -109,6 +107,12 @@ static int dma_mode = 0;    // 0:idle 1:read 2:write
 static int dma_buf_id = 0;
 static int dma_rem_sectors = 0;
 
+static void set_error(unsigned int err, int report_lba) {
+  acsi_disk[dev_id].sense = err;
+  acsi_disk[dev_id].report_lba = report_lba;
+  *acsireg = STATUS_ERROR;
+}
+
 static void read_next(int bsize) {
   if (dma_rem_sectors==0) {
     // finish command
@@ -116,13 +120,13 @@ static void read_next(int bsize) {
     dma_mode = 0;
   } else {
     // initiate DMA read
-    ++img.lba;
+    ++acsi_disk[dev_id].lba;
     int nbs = (bsize-1)/16;
     *acsireg = 0x100 | nbs<<3 | dma_buf_id;
     if (--dma_rem_sectors>0) {
       dma_buf_id ^= 1;
       int offset = dma_buf_id*512;
-      read(img.fd,((char*)iobuf)+offset,512);
+      read(acsi_disk[dev_id].fd,((char*)iobuf)+offset,512);
     }
   }
 }
@@ -139,8 +143,8 @@ static void write_next(void) {
   if (--dma_rem_sectors>0) {
     *acsireg = 0x200 | nbs<<3 | (1-dma_buf_id);
   }
-  ++img.lba;
-  write(img.fd,((char*)iobuf)+dma_buf_id*512,512);
+  ++acsi_disk[dev_id].lba;
+  write(acsi_disk[dev_id].fd,((char*)iobuf)+dma_buf_id*512,512);
   dma_buf_id ^= 1;
   if (dma_rem_sectors==0) {
     // finish command
@@ -169,7 +173,7 @@ static int command_size(unsigned int head) {
 void mode_sense_0(uint8_t *outBuf) {
   // Borrowed from acsi2stm who borrowed from Hatari
 
-  uint32_t blocks = img.sectors;
+  uint32_t blocks = acsi_disk[dev_id].sectors;
   if(blocks > 0xffffff) {
     //dbg("(truncated) ");
     blocks = 0xffffff;
@@ -191,7 +195,7 @@ void mode_sense_0(uint8_t *outBuf) {
 void mode_sense_4(uint8_t *outBuf) {
   // Borrowed from acsi2stm
 
-  uint32_t blocks = img.sectors;
+  uint32_t blocks = acsi_disk[dev_id].sectors;
   int heads;
   int cylinders;
   for(heads = 255; heads >= 1; --heads) {
@@ -218,9 +222,6 @@ void mode_sense_4(uint8_t *outBuf) {
 
 void hdd_interrupt(void) {
   unsigned int reg = *acsireg;
-
-  // if no hard drive image is set, don't respond to commands
-  if (img.fd==-1) return;
 
   if (dma_mode==1) {
     // a DMA read command is running
@@ -253,8 +254,8 @@ void hdd_interrupt(void) {
     if (cmd_ext==0) {
       // command byte
       dev_id = d>>5;
-      // ignore command if wrong device ID
-      if (dev_id!=hdd_dev_id) return;
+      // ignore command if no image is set up for the device ID
+      if (acsi_disk[dev_id].fd==-1) return;
       cmd = d&0x1f;
       if (cmd==0x1f) {
         // ICD command extension
@@ -269,9 +270,11 @@ void hdd_interrupt(void) {
     }
     cmd_size = command_size(cmd);
     command[cmd_rd_idx++] = cmd;
-  } else if (dev_id==hdd_dev_id) {
+  } else {
     command[cmd_rd_idx++] = d;
   }
+
+  struct __acsi_disk *img = &acsi_disk[dev_id];
   if (cmd_rd_idx==cmd_size) {
     cmd_rd_idx = 0;
     cmd_ext = 0;
@@ -290,48 +293,48 @@ void hdd_interrupt(void) {
       }
       memset(data,0,length);
       if (length<=4) {
-        data[0] = (img.sense>>16)&0xff;   // additional sense code
-        if (img.report_lba) {
+        data[0] = (img->sense>>16)&0xff;   // additional sense code
+        if (img->report_lba) {
           data[0] |= 0x80;
-          data[1] = (img.lba>>16)&0xff;
-          data[2] = (img.lba>>8)&0xff;
-          data[3] = img.lba&0xff;
+          data[1] = (img->lba>>16)&0xff;
+          data[2] = (img->lba>>8)&0xff;
+          data[3] = img->lba&0xff;
         }
       } else {
         data[0] = 0x70;
-        if (img.report_lba) {
+        if (img->report_lba) {
           data[0] |= 0x80;
-          data[3] = (img.lba>>24)&0xff;
-          data[4] = (img.lba>>16)&0xff;
-          data[5] = (img.lba>>8)&0xff;
-          data[6] = img.lba&0xff;
+          data[3] = (img->lba>>24)&0xff;
+          data[4] = (img->lba>>16)&0xff;
+          data[5] = (img->lba>>8)&0xff;
+          data[6] = img->lba&0xff;
         }
-        data[2] = img.sense&0x0f;         // sense key
+        data[2] = img->sense&0x0f;         // sense key
         data[7] = 10;   // additional sense length
-        data[12] = (img.sense>>16)&0xff;  // additional sense code
-        data[13] = (img.sense>>8)&0xff;   // additional sense code qualifier
+        data[12] = (img->sense>>16)&0xff;  // additional sense code
+        data[13] = (img->sense>>8)&0xff;   // additional sense code qualifier
       }
       send_reply(data,length);
-      clear_sense_data();
+      clear_sense_data(dev_id);
       return;
     }
     else if (cmd==8) {
       // read
-      img.lba = (command[1]<<8|command[2])<<8|command[3];
+      img->lba = (command[1]<<8|command[2])<<8|command[3];
       dma_rem_sectors = command[4];
-      if (img.lba >= img.sectors) {
+      if (img->lba >= img->sectors) {
         set_error(ERROR_INVADDR,1);
         return;
       }
-      if (img.lba + dma_rem_sectors > img.sectors) {
-        img.lba = img.sectors;
+      if (img->lba + dma_rem_sectors > img->sectors) {
+        img->lba = img->sectors;
         set_error(ERROR_INVADDR,1);
         return;
       }
       dma_mode = 1;
       dma_buf_id = 0;
-      lseek(img.fd,img.lba*512,SEEK_SET);
-      read(img.fd,(void*)iobuf,512);
+      lseek(img->fd,img->lba*512,SEEK_SET);
+      read(img->fd,(void*)iobuf,512);
       read_next(512);
       return;
     }
@@ -339,19 +342,19 @@ void hdd_interrupt(void) {
       // write
       int sector = (command[1]<<8|command[2])<<8|command[3];
       dma_rem_sectors = command[4];
-      if (img.lba >= img.sectors) {
-        img.lba = sector;
+      if (img->lba >= img->sectors) {
+        img->lba = sector;
         set_error(ERROR_INVADDR,1);
         return;
       }
-      if (sector + dma_rem_sectors > img.sectors) {
-        img.lba = img.sectors;
+      if (sector + dma_rem_sectors > img->sectors) {
+        img->lba = img->sectors;
         set_error(ERROR_INVADDR,1);
         return;
       }
       dma_mode = 2;
       dma_buf_id = 0;
-      lseek(img.fd,sector*512,SEEK_SET);
+      lseek(img->fd,sector*512,SEEK_SET);
       write_first();
       return;
     }
@@ -396,7 +399,7 @@ void hdd_interrupt(void) {
     }
     else if (cmd==0x25) {
       // read capacity
-      unsigned int lba = img.sectors-1;
+      unsigned int lba = img->sectors-1;
       uint8_t data[8] = {
         lba>>24, lba>>16, lba>>8, lba,  // logical block address
         0, 0, 2, 0,                     // block size = 512 bytes

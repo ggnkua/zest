@@ -112,7 +112,12 @@ static int handler(void* user, const char* section, const char* name, const char
   } else if (MATCH("floppy","floppy_b_write_protect")) {
     if (value) pconfig->floppy_b_write_protect = truefalse(value);
   } else if (MATCH("hdd","image")) {
-    if (value) pconfig->hdd_image = strdup(value);
+    if (value) pconfig->acsi[0] = strdup(value);
+  } else if (!strcmp(section,"hdd") && !strncmp(name,"acsi",4)) {
+    int id = atoi(name+4);
+    if (id>=0 && id<=7) {
+      pconfig->acsi[id] = strdup(value);
+    }
   } else if (MATCH("keyboard","right_alt_is_altgr")) {
     if (value) pconfig->right_alt_is_altgr = truefalse(value);
   } else if (MATCH("midi","in")) {
@@ -146,6 +151,7 @@ void config_set_file(const char *filename) {
 }
 
 void config_load(void) {
+  int i;
   config.mono = 0;
   config.extended_video_modes = 0;
   config.turbo = 0;
@@ -160,7 +166,9 @@ void config_load(void) {
   config.floppy_b = NULL;
   config.floppy_b_enable = 0;
   config.floppy_b_write_protect = 0;
-  config.hdd_image = NULL;
+  for (i=0;i<8;++i) {
+    config.acsi[i] = NULL;
+  }
   config.right_alt_is_altgr = 0;
   config.midi_in = NULL;
   config.midi_out = NULL;
@@ -175,6 +183,7 @@ void config_load(void) {
 }
 
 void config_save(void) {
+  int i;
   FILE *fd = fopen(config_file,"w");
   if (!fd) {
     perror(config_file);
@@ -199,7 +208,9 @@ void config_save(void) {
   fprintf(fd,"floppy_b_write_protect = %s\n",config.floppy_b_write_protect?"true":"false");
 
   fprintf(fd,"\n[hdd]\n");
-  fprintf(fd,"image = %s\n",config.hdd_image?config.hdd_image:"");
+  for (i=0;i<8;++i) {
+    fprintf(fd,"acsi%d = %s\n",i,config.acsi[i]?config.acsi[i]:"");
+  }
 
   fprintf(fd,"\n[keyboard]\n");
   fprintf(fd,"right_alt_is_altgr = %s\n",config.right_alt_is_altgr?"true":"false");
