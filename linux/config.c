@@ -114,9 +114,11 @@ static int handler(void* user, const char* section, const char* name, const char
   } else if (MATCH("hdd","image")) {
     if (value) pconfig->acsi[0] = strdup(value);
   } else if (!strcmp(section,"hdd") && !strncmp(name,"acsi",4)) {
-    int id = atoi(name+4);
-    if (id>=0 && id<=7) {
-      pconfig->acsi[id] = strdup(value);
+    if (value) {
+      int id = atoi(name+4);
+      if (id>=0 && id<=7) {
+        pconfig->acsi[id] = strdup(value);
+      }
     }
   } else if (MATCH("keyboard","right_alt_is_altgr")) {
     if (value) pconfig->right_alt_is_altgr = truefalse(value);
@@ -200,29 +202,43 @@ void config_save(void) {
   fprintf(fd,"rom_file = %s\n",config.rom_file?config.rom_file:"");
 
   fprintf(fd,"\n[floppy]\n");
-  fprintf(fd,"floppy_a = %s\n",config.floppy_a?config.floppy_a:"");
   fprintf(fd,"floppy_a_enable = %s\n",config.floppy_a_enable?"true":"false");
+  fprintf(fd,"floppy_a = %s\n",config.floppy_a?config.floppy_a:"");
   fprintf(fd,"floppy_a_write_protect = %s\n",config.floppy_a_write_protect?"true":"false");
-  fprintf(fd,"floppy_b = %s\n",config.floppy_b?config.floppy_b:"");
-  fprintf(fd,"floppy_b_enable = %s\n",config.floppy_b_enable?"true":"false");
-  fprintf(fd,"floppy_b_write_protect = %s\n",config.floppy_b_write_protect?"true":"false");
+  if (config.floppy_b_enable) {
+    fprintf(fd,"floppy_b_enable = %s\n",config.floppy_b_enable?"true":"false");
+    fprintf(fd,"floppy_b = %s\n",config.floppy_b?config.floppy_b:"");
+    fprintf(fd,"floppy_b_write_protect = %s\n",config.floppy_b_write_protect?"true":"false");
+  }
 
-  fprintf(fd,"\n[hdd]\n");
+  int hdd_section = 0;
   for (i=0;i<8;++i) {
-    fprintf(fd,"acsi%d = %s\n",i,config.acsi[i]?config.acsi[i]:"");
+    if (config.acsi[i])
+      hdd_section = 1;
+  }
+  if (hdd_section) {
+    fprintf(fd,"\n[hdd]\n");
+    for (i=0;i<8;++i) {
+      if (config.acsi[i])
+        fprintf(fd,"acsi%d = %s\n",i,config.acsi[i]?config.acsi[i]:"");
+    }
   }
 
   fprintf(fd,"\n[keyboard]\n");
   fprintf(fd,"right_alt_is_altgr = %s\n",config.right_alt_is_altgr?"true":"false");
 
-  fprintf(fd,"\n[midi]\n");
-  fprintf(fd,"in = %s\n",config.midi_in?config.midi_in:"");
-  fprintf(fd,"out = %s\n",config.midi_out?config.midi_out:"");
+  if (config.midi_in||config.midi_out) {
+    fprintf(fd,"\n[midi]\n");
+    fprintf(fd,"in = %s\n",config.midi_in?config.midi_in:"");
+    fprintf(fd,"out = %s\n",config.midi_out?config.midi_out:"");
+  }
 
-  fprintf(fd,"\n[jukebox]\n");
-  fprintf(fd,"enabled = %s\n",config.jukebox_enabled?"true":"false");
-  fprintf(fd,"path = %s\n",config.jukebox_path?config.jukebox_path:"");
-  fprintf(fd,"timeout = %d\n",(int)(config.jukebox_timeout_duration));
+  if (config.jukebox_enabled) {
+    fprintf(fd,"\n[jukebox]\n");
+    fprintf(fd,"enabled = %s\n",config.jukebox_enabled?"true":"false");
+    fprintf(fd,"path = %s\n",config.jukebox_path?config.jukebox_path:"");
+    fprintf(fd,"timeout = %d\n",(int)(config.jukebox_timeout_duration));
+  }
 
   fclose(fd);
 }
