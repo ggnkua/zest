@@ -145,14 +145,7 @@ static int handler(void* user, const char* section, const char* name, const char
   return 1;
 }
 
-void config_set_file(const char *filename) {
-  if (config_file) {
-    free((void*)config_file);
-  }
-  config_file = strdup(filename);
-}
-
-void config_load(void) {
+void config_init(void) {
   int i;
   config.mono = 0;
   config.extended_video_modes = 0;
@@ -177,7 +170,20 @@ void config_load(void) {
   config.jukebox_enabled = 0;
   config.jukebox_timeout_duration = 90;
   config.jukebox_path = NULL;
+}
 
+void config_set_file(const char *filename) {
+  if (config_file) {
+    free((void*)config_file);
+  }
+  if (filename) {
+    config_file = strdup(filename);
+  }
+}
+
+void config_load(void) {
+  if (!config_file)
+    return;
   if (ini_parse(config_file,handler,&config) < 0) {
     printf("Can't load `%s`\n",config_file);
     return;
@@ -186,6 +192,8 @@ void config_load(void) {
 
 void config_save(void) {
   int i;
+  if (!config_file)
+    return;
   FILE *fd = fopen(config_file,"w");
   if (!fd) {
     perror(config_file);

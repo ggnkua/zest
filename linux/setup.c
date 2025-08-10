@@ -126,12 +126,6 @@ void pl_reset(void) {
   close(fd);
 }
 
-int usage(const char *progname) {
-  printf("usage: %s [OPTIONS] config.cfg\n"
-    , progname);
-  return 1;
-}
-
 static uint8_t *mem_array;
 
 void cold_reset() {
@@ -233,26 +227,40 @@ static void signal_handler(int sig) {
   thr_end = 1;
 }
 
+int usage(const char *progname) {
+  printf("usage: %s [OPTIONS] [config.cfg]\n"
+    , progname);
+  return 1;
+}
+
 int main(int argc, char **argv) {
   int has_sil;
 
-  const char *configfilename = NULL;
+  config_init();
+  config_set_file("/sdcard/zest.cfg");
+
   int a = 0;
   while (++a<argc) {
     const char *arg = argv[a];
-    if (configfilename == NULL) {
-      configfilename = arg;
+    const char *p = strrchr(arg,'.');
+    if (a==1) {
+      if (p&&!strcasecmp(p,".cfg")) {
+        config_set_file(arg);
+        config_load();
+        continue;
+      }
+      config_load();
+    }
+    if (p&&(!strcasecmp(p,".msa")||!strcasecmp(p,".st")||!strcasecmp(p,".mfm"))) {
+      free((void*)config.floppy_a);
+      config.floppy_a = strdup(arg);
     } else {
       return usage(argv[0]);
     }
   }
-  if (configfilename == NULL) {
-    usage(argv[0]);
-    return 1;
+  if (a==1) {
+    config_load();
   }
-
-  config_set_file(configfilename);
-  config_load();
 
   pl_reset();
 

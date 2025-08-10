@@ -70,6 +70,9 @@ typedef struct {
 
 extern ZestConfig config;
 
+// Initialize config
+void config_init(void);
+
 // Set config file
 void config_set_file(const char *filename);
 
