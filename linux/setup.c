@@ -254,11 +254,6 @@ int main(int argc, char **argv) {
   config_set_file(configfilename);
   config_load();
 
-  if (config.rom_file==NULL) {
-    printf("Fatal: no ROM file configured in config file\n");
-    return 1;
-  }
-
   pl_reset();
 
   parmreg = uio_map("/dev/uio0",0x8000,&parmfd);
