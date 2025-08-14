@@ -42,12 +42,82 @@ This is a standard [unix shell](https://en.wikipedia.org/wiki/Unix_shell) sessio
 We will not describe here how to use a unix shell, there are plenty of useful webpages for that, such as [this one](https://www.stationx.net/unix-commands-cheat-sheet/) or [this one](https://www.geeksforgeeks.org/basic-shell-commands-in-linux/).
 
 
+## Networking configuration
 
-## SSH over ethernet
+Networking is managed using ConnMan.
+It is a daemon that automates most of the networking management.
+It has integrated DHCP management and network time synchronisation.
 
-Ethernet is working; it is configured to detect its IP address with DHCP.
-However, in current releases of zeST, there is no SSH server configured.
-This will be fixed in the future, once a valid, ramdisk-friendly, secure solution is established.
+### Ethernet
+
+Ethernet should work out-of-the-box.; ConnMan is configured to detect the IP address with DHCP.
+
+### Wi-Fi
+
+There is experimental support for Wi-Fi in zeST.
+Since none of the boards zeST supports has an integrated Wi-Fi device, Wi-Fi
+only works through the use of a USB Wi-Fi dongle.
+
+Only a few USB Wi-Fi drivers are integrated in zeST.
+They are RTL87xx and RTL88xx drivers from Realtek.
+If you would like support for another device, please [contact me](/support).
+
+ConnMan automatically detects new USB Wi-Fi devices
+and connects to its known configured network.
+
+To set up a new Wi-Fi connection, run `connmanctl` in interactive mode:
+
+    # connmanctl
+
+On first use, enable Wi-Fi:
+
+    connmanctl> enable wifi
+
+Start a scan for available networks:
+
+    connmanctl> scan wifi
+
+After a few seconds you get the response: `Scan completed for wifi`.
+Get the list of networks:
+
+    connmanctl> services
+
+You get a list of network names with associated IDs starting with `wifi_`.
+
+Activate the agent that manages user requests:
+
+    connmanctl> agent on
+
+Connect to your network using its ID:
+
+    connmanctl> connect wifi_001f1fa3d718_4b616d6f756c6f78_managed_psk
+
+You will be prompted to input the Wi-Fi security passphrase.
+Enter it, then type:
+
+    connmanctl> quit
+
+You should be connected to the network after a few seconds.
+
+
+## SSH
+
+SSH is a secure and convenient remote login and file copy service.
+
+OpenSSH is configured, but you need some manual configuration to have it working.
+Since there is no root password, ssh password login is disabled for root.
+
+The recommended way is to use public key authentication.
+
+From the serial console, when in the root user home directory, send your public
+key file using [zmodem](#file-transfer-through-serial-zmodem).
+Supposing the key file name is `id_rsa.pub`, use the command:
+
+    # mkdir -p .ssh
+    # chmod 700 .ssh
+    # mv id_rsa.pub .ssh/authorized_keys
+
+Now the board is accessible as root using that public key.
 
 
 ## Start and stop zeST
@@ -96,12 +166,30 @@ To stop zeST, follow the instructions in the [Start and stop zeST](#start-and-st
 
 **Warning #2**: Once you are done with file management in the partition, you must unmount it before starting zeST again.
 
-To mount the partition, you need to know the beginning sector number for that partition.
-Those are listed when you partition the disk with your partitioning tool.
-The first partition (partition C) normally should start from sector 2.
+To mount the partition, you need to know the offset for that partition in the image.
 
-From the sector number, you can deduce an *offset* by multiplying it by 512.
-Thus, if your partition C starts from sector 2, the offset should be 1024.
+To list the partitions in a `hdd.img` file along with their offsets, use the command:
+
+    parted hdd.img unit b p
+
+You will get a result like this:
+
+```raw
+Model:  (file)
+Disk /sdcard/hdd.img: 190840832B
+Sector size (logical/physical): 512B/512B
+Partition Table: atari
+Disk Flags:
+
+Number  Start      End         Size       Type     File system  Flags
+ 1      1024B      33554431B   33553408B  primary
+ 2      33554432B  96468991B   62914560B  primary  fat16
+ 3      96468992B  190840831B  94371840B  primary  fat16
+```
+
+In the above example, there are 3 partitions.
+The first partition has offset 1024, the second partition has offset 33554432,
+and the third partition has offset 96468992.
 
 The command for mounting a partition with offset 1024 from an image file located in `/sdcard/hdd.img` is the following:
 
@@ -163,4 +251,3 @@ trust 11:22:33:44:55:66
 For more complete Bluetooth command line tutorials, you can check
 [this link](https://www.baeldung.com/linux/bluetooth-via-terminal)
 or [that one](https://www.makeuseof.com/manage-bluetooth-linux-with-bluetoothctl/).
-

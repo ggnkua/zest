@@ -13,6 +13,7 @@ For recent news, contact information, access to the source code etc, please visi
 - [Getting Started](getting-started): How to install zeST on your FPGA board.
     - [Specific instructions for the ZynqBerry board](zynqberry_setup)
 - [General Use](general_use): How to use zeST, the settings menu and keyboard shortcuts.
+- [Hard disk management](hard_disk): How to add hard disk images and create new hard disk images.
 - [Configuration file](config_file): zeST configuration file description.
 - [Drivers](drivers): Provided drivers to take profit from extended video modes or better use your USB PC keyboard.
 - [The board's Linux system](linux): How to use the onboard Linux system for file transfer, managing Bluetooth devices and setting up the network connection.

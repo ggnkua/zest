@@ -1,7 +1,7 @@
 ---
 title: "Getting started"
 date: 2022-03-15T18:00.00+01:00
-lastmod: 2025-02-05
+lastmod: 2025-08-14
 ---
 
 This page explains how to get zeST up and running for your FPGA board.
@@ -18,7 +18,7 @@ Please note that zeST also supports the MyIR Z-Turn 7020 board. For now the buil
 
 # Installation
 
-If you just acquired a brand new ZynqBerry, there are [specific first-time-only setup instructions](/zynqberry_setup) you need to follow first.
+If you just acquired a brand new ZynqBerry, there are [specific first-time-only setup instructions](/doc/zynqberry_setup) you need to follow first.
 For the other supported boards, all the necessary installation instructions follow.
 
 To install zeST on your board, just extract all the files from the archive into the root directory of a FAT32-formatted micro-SD card, and also copy the `boot.bin` file specific to your board (from the `boards` directory) to that same root directory.
@@ -37,4 +37,4 @@ You can also use a USB keyboard/mouse combo, or separate keyboard and mouse conn
 Of course you will also need to connect the board to a HDMI screen.
 
 After following these steps, your board is ready to boot zeST.
-You can follow the [general use instructions](/general_use/) to learn how to use zeST efficiently.
+You can follow the [general use instructions](/doc/general_use/) to learn how to use zeST efficiently.

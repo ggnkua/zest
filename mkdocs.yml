@@ -6,8 +6,11 @@ nav:
     - User Guide:
         - general_use.md
         - config_file.md
+        - hard_disk.md
         - drivers.md
         - linux.md
         - zynqberry_setup.md
 
-#theme: readthedocs
+theme:
+    name: mkdocs
+    highlightjs: false
