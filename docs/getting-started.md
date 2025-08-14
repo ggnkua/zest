@@ -8,7 +8,7 @@ This page explains how to get zeST up and running for your FPGA board.
 
 # Download
 
-The latest build of zeST can be downloaded by clicking [this link](https://zest.sector1.fr/download/zeST-20250627.tar.xz).
+The latest build of zeST can be downloaded by clicking [this link](https://zest.sector1.fr/download/zeST-20250814.tar.xz).
 
 You can also access older releases by browsing the [download directory](https://zest.sector1.fr/download/).
 
