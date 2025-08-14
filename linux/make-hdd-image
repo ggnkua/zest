@@ -1,0 +1,29 @@
+#!/bin/sh
+
+if [ $# -lt 2 ] ; then
+    echo "usage: $0 SIZE1 [SIZE2...]"
+    exit 1
+fi
+dest=$1
+shift
+
+size=0
+for i in $@ ; do
+    echo $i
+    size=`expr $size + $i`
+done
+
+rm -f $dest
+dd of=$dest count=0 bs=1M seek=$size
+parted $dest -- mklabel atari
+off=0
+for s in $@ ; do
+    beg=`expr $off \* 2048`
+    end=`expr "(" $off + $s ")" \* 2048 - 1`
+    test $beg -eq 0 && beg=2
+    parted -a minimal $dest -- mkpart primary fat16 ${beg}s ${end}s
+    fmt="-F 16"
+    test $s -le 32 -a $off -eq 0 && fmt="-A"
+    mkdosfs --offset=$beg $fmt $dest `expr "(" $end - $beg + 1 ")" / 2`
+    off=`expr $off + $s`
+done

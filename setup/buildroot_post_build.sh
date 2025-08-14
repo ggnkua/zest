@@ -91,6 +91,7 @@ EOF
 
 # zeST binary
 cp -a $SRCDIR/linux/zeST $TARGET/usr/bin
+cp -a $SRCDIR/linux/make-hdd-image $TARGET/usr/bin
 
 # default ROM image
 mkdir -p $TARGET/usr/share/zest
