@@ -248,6 +248,7 @@ static void load_st_msa(Flopimg *img, int skew, int interleave) {
     int tracks=readwb(buf+8)+1;
     if (img->ntracks>MAXTRACK) {
       printf("Disk contains %d tracks, which is more than what is supported (%d)\n",tracks,MAXTRACK);
+      return;
     }
     unsigned short start_track = readwb(buf+6);
     if (start_track != 0) {
@@ -257,6 +258,10 @@ static void load_st_msa(Flopimg *img, int skew, int interleave) {
     img->nsectors=readwb(buf+2);
     img->nsides=readwb(buf+4)+1;
     img->ntracks=readwb(buf+8)+1;
+    if (img->nsectors>11) {
+      printf("unsupported number of sectors per track:%u\n",img->nsectors);
+      return;
+    }
   }
   printf("tracks:%u sides:%u sectors:%u\n",img->ntracks,img->nsides,img->nsectors);
 
