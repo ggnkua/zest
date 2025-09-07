@@ -1,4 +1,4 @@
--- zest_zynqberry_top.vhd - Top-level for the TE0726 "ZynqBerry" board zeST implementation
+-- zest_te0726_top.vhd - Top-level for the TE0726 "ZynqBerry" board zeST implementation
 --
 -- Copyright (c) 2024-2025 Francois Galea <fgalea at free.fr>
 -- This program is free software: you can redistribute it and/or modify

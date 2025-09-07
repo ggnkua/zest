@@ -20,7 +20,7 @@ hsi generate_app -hw \$hwdsgn -os standalone -proc ps7_cortexa9_0 -app zynq_fsbl
 EOF
 $VITIS/bin/xsct fsbl.tcl || exit $?
 
-if [ "$target" = zynqberry ] ; then
+if [ "$target" = te0726 ] ; then
     # Force booting from SD card - necessary on clg225 FPGAs
     # also enable booting from SD1
     patch -p0 <<EOF
