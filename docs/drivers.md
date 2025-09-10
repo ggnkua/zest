@@ -11,6 +11,9 @@ They are located in the zeST binary archive, in the `drivers` subfolder.
 
 When (and only when) the `extended_video_modes` option is enabled, zeST includes additional, nonstandard screen modes.
 There is one for each of low and medium resolutions.
+They basically correspond to the hardware equivalent of demoscene fullscreen techniques.
+This allows to achieve resolutions of 832×276 pixels in medium resolution mode, and
+416×276 in low resolution mode.
 
 Technically, those extended modes are made available to programs by enabling bit 2 of the ST's resolution hardware register (at address `$ff8260`).
 
