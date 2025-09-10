@@ -141,7 +141,10 @@ static int settings(void) {
   }
 
   if (strcmp(config.rom_file,tmp_rom)) {
-    load_rom(config.rom_file);
+    if (load_rom(config.rom_file)!=0) {
+      // in case the ROM could not be loaded, fall back to default ROM
+      if (load_rom("/usr/share/zest/rom.img")!=0) return 1;
+    }
     ret = 1;
   }
 

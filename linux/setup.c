@@ -199,15 +199,15 @@ int load_rom(const char *filename) {
   }
   rom_addr = read_u32(buf+8);
   memcpy(mem_array+rom_addr,buf,0x40);
-  rom_size = 0x40+fread(mem_array+rom_addr+0x40,1,0x100000-0x40,bootfd);
+  rom_size = (0x140+fread(mem_array+rom_addr+0x40,1,0x100000-0x40,bootfd))/1024;
   fclose(bootfd);
-  if (rom_size==0x30000 && rom_addr==0xFC0000)
+  if (rom_size==192 && rom_addr==0xFC0000)
     cfg_romsize = 0;
-  else if (rom_size==0x40000 && rom_addr==0xE00000)
+  else if (rom_size==256 && rom_addr==0xE00000)
     cfg_romsize = 1;
-  else if (rom_size==0x80000 && rom_addr==0xE00000)
+  else if (rom_size==512 && rom_addr==0xE00000)
     cfg_romsize = 2;
-  else if (rom_size==0x100000 && rom_addr==0xE00000)
+  else if (rom_size==1024 && rom_addr==0xE00000)
     cfg_romsize = 3;
   else {
     printf("%s: unsupported ROM size/address\n",filename);
