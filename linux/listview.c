@@ -193,7 +193,6 @@ static int add_entry(ListView *lv,int type,const char *title,struct lv_entry *e)
 }
 
 void lv_init(const char *font_file_name) {
-  input_init();
   osd_init();
   lv_font = font_new_from_file(font_file_name);
 }
