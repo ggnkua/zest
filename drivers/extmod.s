@@ -82,13 +82,6 @@ wtvbl:	cmp.l	$462.w,a0	; wait for new VBL
 
 	lsl	#4,d1		; mode*16
 
-	move.l	$44e.w,a0	; logical screen base (_v_bas_ad)
-	suba.w	mdata+12(pc,d1.w),a0	; corrected screen address
-	move.l	a0,$44e.w	; new logical screen base
-	move.l	a0,d0
-	lsr.w	#8,d0
-	move.l	d0,$ffff8200.w	; physical screen address
-
 	dc.w	$a000		; get Line-A structure address in a0
 	move.l	(sp)+,a1	; int_out array
 	move	mdata+0(pc,d1.w),d0	; screen width
@@ -235,6 +228,13 @@ mdsearch_found:
 
 ; if not found (should not happen!), do nothing
 mdsearch_notfound:
+	move.l	$44e.w,a0	; logical screen base (_v_bas_ad)
+	suba.w	mdata+12(pc),a0	; corrected screen address
+	move.l	a0,$44e.w	; new logical screen base
+	move.l	a0,d0
+	lsr.w	#8,d0
+	move.l	d0,$ffff8200.w	; physical screen address
+
 	moveq	#0,d0
 	rts
 
