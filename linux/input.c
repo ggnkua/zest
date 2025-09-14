@@ -45,6 +45,9 @@ struct _dev_info {
   int joyid;
   // joystick X axis - Y is joy_axis+1
   int joy_axis;
+  int joy_min;
+  int joy_max;
+  int start_button;
 } dev_info[256];
 
 static struct pollfd pfd[256];
@@ -57,6 +60,7 @@ static int ie_i = 0;
 static int inotify_fd;
 
 static void add_device(const char *name) {
+  int abs[6] = {0};
   unsigned long evtypes[BFSIZE(EV_CNT)];
   unsigned long cap[EV_CNT][BFSIZE(KEY_CNT)];
   char buf[256];
@@ -68,6 +72,7 @@ static void add_device(const char *name) {
   pfd[nfds].events = POLLIN;
   dev_info[nfds].name = strdup(name);
   dev_info[nfds].joyid = -1;
+  dev_info[nfds].start_button = -1;
   // scan device capabilities
   memset(evtypes,0,sizeof(evtypes));
   memset(cap,0,sizeof(cap));
@@ -78,12 +83,11 @@ static void add_device(const char *name) {
       ioctl(fd,EVIOCGBIT(evtype,KEY_CNT),cap[evtype]);
     }
   }
-  // if device supports EV_ABS, and it has a button, test if it has joystick capabilities
+  // test for joystick capabilities (Gamepad mode)
   if (BFTEST(evtypes,EV_ABS) && BFTEST(cap[EV_KEY],BTN_GAMEPAD)) {
     int axis = -1;
-    for (evcode=0;evcode<KEY_CNT;++evcode) {
+    for (evcode=0;evcode<ABS_CNT;++evcode) {
       if (BFTEST(cap[EV_ABS],evcode)) {
-        int abs[6] = {0};
         // If we find two consecutive axes with minval=-1 and maxval=1
         // then it's a joystick
         ioctl(fd,EVIOCGABS(evcode),abs);
@@ -92,6 +96,8 @@ static void add_device(const char *name) {
             // joystick found
             dev_info[nfds].joyid = njs++;
             dev_info[nfds].joy_axis = axis;
+            dev_info[nfds].joy_min = abs[1];
+            dev_info[nfds].joy_max = abs[2];
             break;
           }
           axis = evcode;
@@ -100,7 +106,22 @@ static void add_device(const char *name) {
         }
       }
     }
-
+  }
+  // test for joystick capabilities (Joystick mode)
+  if (dev_info[nfds].joyid==-1 && BFTEST(evtypes,EV_ABS) && BFTEST(cap[EV_ABS],ABS_X) && BFTEST(cap[EV_ABS],ABS_Y) && BFTEST(cap[EV_KEY],BTN_JOYSTICK)) {
+    dev_info[nfds].joyid = njs++;
+    dev_info[nfds].joy_axis = ABS_X;
+    ioctl(fd,EVIOCGABS(ABS_X),abs);
+    dev_info[nfds].joy_min = abs[1];
+    dev_info[nfds].joy_max = abs[2];
+    int i;
+    // we consider the start button is the last one in the button list
+    for (i=BTN_DEAD;i>=BTN_THUMB2;--i) {
+      if (BFTEST(cap[EV_KEY],i)) {
+        dev_info[nfds].start_button = i;
+        break;
+      }
+    }
   }
   ++nfds;
 }
@@ -161,15 +182,29 @@ int input_event(int timeout, int *type, int *code, int *value, int *joyid) {
     *value = (int)ie[ie_i].value;
     if (joyid) *joyid = devinfo->joyid;
     ++ie_i;
-    if (*type==EV_ABS && devinfo->joyid>=0) {
+    //if (*type!=EV_SYN && *type!=EV_ABS && (*type!=EV_MSC||*code!=MSC_TIMESTAMP))
+    //  printf("type:%d code:%d value:%d joyid:%d\n",*type,*code,*value,devinfo->joyid);
+    if (devinfo->joyid>=0) {
       // special treatment for identified joysticks
-      if (*code<devinfo->joy_axis || *code>devinfo->joy_axis+1) {
-        // ignore EV_ABS events from other axes
-        return input_event(timeout,type,code,value,joyid);
+      if (*type==EV_ABS && devinfo->joyid>=0) {
+        if (*code<devinfo->joy_axis || *code>devinfo->joy_axis+1) {
+          // ignore EV_ABS events from other axes
+          return input_event(timeout,type,code,value,joyid);
+        }
+        // remap the axis to ABS_X and ABS_Y and values -1/0/1
+        *code = *code-devinfo->joy_axis+ABS_X;
+        if (*value==devinfo->joy_min) *value = -1;
+        else if (*value==devinfo->joy_max) *value = 1;
+        else *value = 0;
       }
-      // remap the axis to ABS_X and ABS_Y
-      *code = *code-devinfo->joy_axis+ABS_X;
-    };
+      if (*type==EV_KEY && *code>=BTN_JOYSTICK && *code<=BTN_DEAD) {
+        // remap joystick key codes to gamepad codes
+        if (*code==devinfo->start_button) *code = BTN_START;
+        else {
+          *code = *code+(BTN_GAMEPAD-BTN_JOYSTICK);
+        }
+      }
+    }
     return 1;
   }
   for (; fd_i<nfds; ++fd_i) {
