@@ -109,6 +109,14 @@ wtvbl:	cmp.l	$462.w,a0	; wait for new VBL
 	subq	#1,d0
 	move	d0,-42(a0)		; Number of VT52 text lines -1
 
+	move.l	new_maus+2(pc),d0
+	cmp.l	#$12345678,d0	; Must install new mouse routine?
+	beq.s	no_new_mouse
+	move.l	$456.w,a0	; _vblqueue
+	move.l	(a0),orig_vblq0+2
+	move.l	#new_maus,(a0)	; replace the current mouse cursor draw routine
+no_new_mouse:
+
 	rte
 
 ; Extended screen mode data values in order, and offsets
@@ -123,6 +131,92 @@ wtvbl:	cmp.l	$462.w,a0	; wait for new VBL
 mdata:
 	dc.w	416,276,208, 52,1664,34,25600,0	; low resolution
 	dc.w	832,276,208,104,1664,34,25600,0	; medium resolution
+
+; Replacement for the system mouse routine
+; to fix one bug on TOS 1.02 in which the mouse cursor does not go below 327
+; scanlines due to an arithmetic overflow.
+; It is mainly the original TOS code with only the faulty Instruction fixed
+; and some addresses translated.
+; The method is taken from NEWMOUSE by Thomas Huth, who extracted it from
+; Screen Plus by Steffen Scharfe.
+; The original code uses some hardcoded address values in ROM that work only
+; on German TOS 1.02.
+; This code uses relative addressing that (hopefully) makes it compatible
+; with any language flavour of TOS 1.02.
+;
+; Many thanks to Thomas who pointed me to the original source code.
+new_maus:
+	movea.l #$12345678,a5	; Line-A variable base
+	tst.b   -$153(a5)
+	bne.s   maus_end
+	bclr    #0,-$154(a5)
+	beq.s   maus_end
+	move.l  -$158(a5),d1
+	move.l  d1,d0
+	swap    d0
+	movem.w d0-d1,-(sp)
+	lea     -$14a(a5),a2
+orig_vblq0:
+	movea.l #$12345678,a6	; original _vblqueue[0] address
+maus_adr1:
+	jsr	$25a(a6)
+	movem.w	(sp)+,d0-d1
+	movea.l	new_maus+2(pc),a5
+	lea	-$358(a5),a0
+	lea	-$14a(a5),a2
+	bsr.s	new_maus1
+maus_end:
+	rts
+new_maus1:
+	move.w	6(a0),-(sp)
+	move.w	8(a0),-(sp)
+	moveq	#0,d2
+	tst.w	4(a0)
+	bge.s	replace
+	moveq	#16,d2
+replace:
+	move.w	d2,-(sp)
+	moveq	#0,d2
+	bclr	#1,6(a2)
+	sub.w	(a0),d0
+	bcs.s	x_hotspot
+	move.w	-$2b4(a5),d3
+	subi.w	#15,d3
+	cmp.w	d3,d0
+	bhi.s	teilweise_x
+	bset	#1,6(a2)
+	bra.s	maus_y
+x_hotspot:
+	addi.w	#16,d0
+	moveq	#8,d2
+	bra.s	maus_y
+teilweise_x:
+	moveq	#16,d2
+maus_y:	sub.w	2(a0),d1
+	lea	10(a0),a0
+	bcs.s	y_hotspot
+	move.w	-$2b2(a5),d3
+	subi.w	#15,d3
+	cmp.w	d3,d1
+	bhi.s	teilweise_y
+	moveq	#16,d5
+	bra.s	maus1
+y_hotspot:
+	move.w	d1,d5
+	addi.w	#16,d5
+	asl.w	#2,d1
+	suba.w	d1,a0
+	clr.w	d1
+	bra.s	maus1
+teilweise_y:
+	move.w	-$2b2(a5),d5
+	sub.w	d1,d5
+	addq.w	#1,d5
+maus1:	jsr	-$5d72(a6)
+	movea.l	$44e.w,a1	; _v_bas_ad
+	adda.l	d1,a1		; Replacement for faulty instruction. (original was add.w)
+maus_adr3:
+	jmp	$108(a6)	; Jump to the rest of the original code
 
 end_resident:
 
@@ -182,6 +276,14 @@ _is2:
 
 	move.l	$88.w,old_gem
 	move.l	#my_gem,$88.w	; AES/VDI (Trap #2) vector
+
+	move.l	$4f2,a0		; _sysbase
+	cmp	#$102,2(a0)	; TOS version
+	bne.s	no_mousevec	; Install mouse vector only on TOS 1.02
+
+	dc.w	$a000
+	move.l	a0,new_maus+2
+no_mousevec:
 
 	moveq	#0,d0
 	move	mdata+12(pc),d0	; Extra screen bytes for mode 0
@@ -247,7 +349,7 @@ cconws:
 
 	section data
 hello_txt:	dc.b	13,10
-		dc.b	27,"p- zeST extended screen modes v0.2 -",27,"q",13,10
+		dc.b	27,"p- zeST extended screen modes v1.0 -",27,"q",13,10
 		dc.b	"by Fran",$87,"ois Galea",13,10,0
 hires_txt:	dc.b	"does not work in high resolution!",13,10,0
 noextmod_txt:	dc.b	"extended modes are disabled!",13,10,0
