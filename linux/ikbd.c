@@ -20,6 +20,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <stdio.h>
+#include <sys/time.h>
 
 #include <linux/input-event-codes.h>
 
@@ -56,6 +57,8 @@ void * thread_ikbd(void * arg) {
   int dx=0,dy=0,ox=0,oy=0;
   int timeout = 100;
   int tp_x=-1,tp_y=-1;
+  unsigned int old_tm = 0;
+  int old_key = -1;
 
   int meta = 0;
   joyemufd = open(JOY_EMU_LED_FILE,O_WRONLY|O_SYNC);
@@ -283,7 +286,17 @@ void * thread_ikbd(void * arg) {
           }
           // printf("Key code:%#x joyid:%d key:%d val:%d\n",evcode,joyid,key,evvalue);
           if (key!=-1) {
+            struct timeval tv;
+            gettimeofday(&tv,NULL);
+            unsigned int tm = tv.tv_sec*1000000 + tv.tv_usec;   // may overflow, not a problem
+            if (tm<old_tm+30000 && key==old_key) {
+              // if events on the same key are too close from each other, wait a bit
+              usleep(old_tm+30000-tm);
+              tm = old_tm+30000;
+            }
             parmreg[4+key/32] = (parmreg[4+key/32] & ~(1<<key%32)) | (!evvalue)<<(key%32);
+            old_tm = tm;
+            old_key = key;
           }
           break;
         case EV_ABS:
