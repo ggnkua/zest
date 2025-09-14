@@ -196,6 +196,13 @@ foundmax:
 	sub.l	d0,a0		; fix _memtop so it points before screen memory
 	move.l	a0,$436.w
 
+	move.l	$44e.w,a0	; logical screen base (_v_bas_ad)
+	sub.l	d0,a0		; corrected screen address
+	move.l	a0,$44e.w	; new logical screen base
+	move.l	a0,d1
+	lsr.w	#8,d1
+	move.l	d1,$ffff8200.w	; physical screen address
+
 ; Look for our program's MD (memory descriptor)
 ; To our knowledge, there is no known standard way to find the MPB (Memory
 ; Parameter Block) that has been initialised at boot.
@@ -228,13 +235,6 @@ mdsearch_found:
 
 ; if not found (should not happen!), do nothing
 mdsearch_notfound:
-	move.l	$44e.w,a0	; logical screen base (_v_bas_ad)
-	suba.w	mdata+12(pc),a0	; corrected screen address
-	move.l	a0,$44e.w	; new logical screen base
-	move.l	a0,d0
-	lsr.w	#8,d0
-	move.l	d0,$ffff8200.w	; physical screen address
-
 	moveq	#0,d0
 	rts
 
