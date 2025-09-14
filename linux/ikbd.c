@@ -75,12 +75,33 @@ void * thread_ikbd(void * arg) {
       int key;
       switch (evtype) {
         case EV_REL:
-          if (evcode == 0) {
-            dx -= evvalue;
-          } else {
-            dy -= evvalue;
+          switch (evcode) {
+            case REL_X:
+              // horizontal mouse movement
+              dx -= evvalue;
+              timeout = 0;
+              break;
+            case REL_Y:
+              // vertical mouse movement
+              dy -= evvalue;
+              timeout = 0;
+              break;
+            case REL_WHEEL:
+              // mouse wheel
+              key = 0;
+              if (evvalue<0) {
+                key = 56;   // down arrow
+              } else if (evvalue>0) {
+                key = 22;   // up arrow
+              }
+              if (key) {
+                parmreg[4+key/32] &= ~(1<<key%32);
+                usleep(28000);
+                parmreg[4+key/32] |= 1<<key%32;
+                usleep(28000);
+              }
+              break;
           }
-          timeout = 0;
           break;
         case EV_KEY:
           if (evcode==KEY_LEFTMETA || evcode==KEY_RIGHTMETA) {
