@@ -258,6 +258,7 @@ void * thread_ikbd(void * arg) {
               if (joyid==0) key = 127;
               if (joyid==1) key = 122;
               break;
+            case BTN_EAST: key = 89; break;  // space bar on the joystick
             case KEY_NUMLOCK:
               if (evvalue == 1) {
                 set_joy_emu(!joy_emu);
