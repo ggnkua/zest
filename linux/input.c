@@ -60,7 +60,6 @@ static int ie_i = 0;
 static int inotify_fd;
 
 static void add_device(const char *name) {
-  int abs[6] = {0};
   unsigned long evtypes[BFSIZE(EV_CNT)];
   unsigned long cap[EV_CNT][BFSIZE(KEY_CNT)];
   char buf[256];
@@ -83,43 +82,23 @@ static void add_device(const char *name) {
       ioctl(fd,EVIOCGBIT(evtype,KEY_CNT),cap[evtype]);
     }
   }
-  // test for joystick capabilities (Gamepad mode)
-  if (BFTEST(evtypes,EV_ABS) && BFTEST(cap[EV_KEY],BTN_GAMEPAD)) {
-    int axis = -1;
-    for (evcode=0;evcode<ABS_CNT;++evcode) {
-      if (BFTEST(cap[EV_ABS],evcode)) {
-        // If we find two consecutive axes with minval=-1 and maxval=1
-        // then it's a joystick
-        ioctl(fd,EVIOCGABS(evcode),abs);
-        if (abs[1]==-1 && abs[2]==1) {
-          if (axis!=-1) {
-            // joystick found
-            dev_info[nfds].joyid = njs++;
-            dev_info[nfds].joy_axis = axis;
-            dev_info[nfds].joy_min = abs[1];
-            dev_info[nfds].joy_max = abs[2];
-            break;
-          }
-          axis = evcode;
-        } else {
-          axis = -1;
-        }
-      }
-    }
-  }
-  // test for joystick capabilities (Joystick mode)
-  if (dev_info[nfds].joyid==-1 && BFTEST(evtypes,EV_ABS) && BFTEST(cap[EV_ABS],ABS_X) && BFTEST(cap[EV_ABS],ABS_Y) && BFTEST(cap[EV_KEY],BTN_JOYSTICK)) {
+  // test for joystick capabilities
+  if (BFTEST(evtypes,EV_ABS) && BFTEST(cap[EV_ABS],ABS_X) && BFTEST(cap[EV_ABS],ABS_Y) && (BFTEST(cap[EV_KEY],BTN_JOYSTICK) || BFTEST(cap[EV_KEY],BTN_GAMEPAD))) {
+    int abs[6] = {0};
+    int axis = ABS_X;
+    if (BFTEST(cap[EV_ABS],ABS_HAT0X) && BFTEST(cap[EV_ABS],ABS_HAT0Y)) axis = ABS_HAT0X;
     dev_info[nfds].joyid = njs++;
-    dev_info[nfds].joy_axis = ABS_X;
-    ioctl(fd,EVIOCGABS(ABS_X),abs);
+    dev_info[nfds].joy_axis = axis;
+    ioctl(fd,EVIOCGABS(axis),abs);
     dev_info[nfds].joy_min = abs[1];
     dev_info[nfds].joy_max = abs[2];
-    int i;
-    // we consider the start button is the last one in the button list
-    for (i=BTN_DEAD;i>=BTN_THUMB2;--i) {
-      if (BFTEST(cap[EV_KEY],i)) {
-        dev_info[nfds].start_button = i;
-        break;
+    // if no start button code, we consider the start button is the last one in the button list
+    if (!BFTEST(cap[EV_KEY],BTN_START)) {
+      for (evcode=BTN_THUMBR;evcode>=BTN_THUMB2;--evcode) {
+        if (BFTEST(cap[EV_KEY],evcode)) {
+          dev_info[nfds].start_button = evcode;
+          break;
+        }
       }
     }
   }
