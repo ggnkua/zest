@@ -85,7 +85,11 @@ architecture behavioral of mmu is
 	signal mode_load_0		: std_logic;
 	signal mode_load_1		: std_logic;
 	signal mode_load		: std_logic;
+	signal mode_ram			: std_logic;
 	signal mode_reg			: std_logic;
+	signal dev_video		: std_logic;
+	signal dev_memcfg		: std_logic;
+	signal dev_dma			: std_logic;
 	signal cmpcsn_en		: std_logic;
 	signal sdtackn			: std_logic;
 	signal sde				: std_logic;
@@ -298,6 +302,9 @@ begin
 		end if;
 	end process;
 
+	dev_video <= '1' when DEVn = '0' and iA(15 downto 7) & "0000000" = x"8200" else '0';
+	dev_memcfg <= '1' when DEVn = '0' and iA(15 downto 1) & '1' = x"8001" else '0';
+	dev_dma <= '1' when DEVn = '0' and iA(15 downto 4) & "0000" = x"8600" else '0';
 	-- MMU sequence
 	process(clk,resetn)
 	begin
@@ -312,10 +319,11 @@ begin
 		sde <= '0';
 		loadn <= '1';
 		cmpcsn_en <= '0';
+		mode_ram <= '0';
 		mode_reg <= '0';
 	elsif rising_edge(clk) then
 		if en8rck = '1' then
-			if mode_reg = '1' then
+			if mode_ram = '1' or mode_reg = '1' then
 				sdtackn <= '0';
 			end if;
 			if cnt = 0 then
@@ -333,13 +341,17 @@ begin
 			end if;
 
 			oD <= (others => '1');
+			mode_ram <= '0';
 			mode_reg <= '0';
-			if (RAMn = '0' or DEVn = '0') and cnt = 1 then
+			if RAMn = '0' and cnt = 1 then
+				mode_ram <= '1';
+			end if;
+			if (dev_video = '1' or dev_memcfg = '1' or dev_dma = '1') and cnt = 1 then
 				mode_reg <= '1';
 			end if;
 			if mode_reg = '1' then
 				-- hardware registers
-				if iA(23 downto 7) & "0000000" = x"ff8200" then
+				if dev_video = '1' then
 					if iLDSn = '0' then
 						-- video pointer registers
 						if iRWn = '1' then
@@ -361,7 +373,7 @@ begin
 							end case;
 						end if;
 					end if;
-				elsif iA(23 downto 1) & '1' = x"ff8001" and iLDSn = '0' then
+				elsif dev_memcfg = '1' and iLDSn = '0' then
 					-- memory configuration
 					if iRWn = '1' then
 						-- read
@@ -370,7 +382,7 @@ begin
 						-- write
 						memcfg <= iD(3 downto 0);
 					end if;
-				elsif iA(23 downto 4) & "0000" = x"ff8600" and iLDSn = '0' then
+				elsif dev_dma = '1' and iLDSn = '0' then
 					-- DMA base and counter
 					if iRWn = '1' then
 						-- read

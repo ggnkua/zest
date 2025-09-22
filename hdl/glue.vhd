@@ -491,12 +491,10 @@ begin
 	srturbo <= '0';
 	sdevn <= '1';
 	if FC /= "111" and iASn = '0' then
-		if iA(23 downto 15) = "111111111" then
+		if iA(23 downto 16) = "11111111" then
 			-- hardware registers
 			if FC(2) = '1' then
-				if iA(15 downto 7)&"0000000" = x"8200" or iA(15 downto 1)&'1' = x"8001" or iA(15 downto 3)&"000" = x"8608" then
-					sdevn <= '0';
-				end if;
+				sdevn <= '0';
 			end if;
 		else
 			if ((unsigned(iA(23 downto 16)) >= x"fa" and unsigned(iA(23 downto 16)) <= x"fb")
