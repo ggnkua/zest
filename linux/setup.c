@@ -338,6 +338,7 @@ int main(int argc, char **argv) {
   pthread_join(floppy_thr,NULL);
   pthread_join(midi_thr,NULL);
   pthread_join(infomsg_thr,NULL);
+  pthread_join(jukebox_thr,NULL);
   if (has_sil) {
     hdmi_stop();
   }
