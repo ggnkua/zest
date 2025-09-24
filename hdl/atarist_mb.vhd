@@ -36,6 +36,8 @@ entity atarist_mb is
 		cfg_romsize		: in std_logic_vector(1 downto 0);
 		cfg_turbo		: in std_logic;
 
+		rtc_data		: in std_logic_vector(51 downto 0);
+
 		pclken			: out std_logic;
 		de				: out std_logic;
 		hsync			: out std_logic;
@@ -179,6 +181,8 @@ architecture structure of atarist_mb is
 	signal bus_LDSn		: std_logic;
 	signal bus_UDSn		: std_logic;
 	signal bus_DTACKn	: std_logic;
+
+	signal rtc_d		: std_logic_vector(3 downto 0);
 
 	signal cpu_HALTn	: std_logic;
 	signal cpu_A		: std_logic_vector(23 downto 1);
@@ -326,6 +330,7 @@ begin
 	stbus:entity atarist_bus port map(
 		cpu_d => cpu_oD,
 		cpu_e => cpu_RWn,
+		rtc_d => rtc_d,
 		shifter_od => shifter_oD,
 		shifter_e => shifter_CSn,
 		ram_d => ram_r_d,
@@ -747,6 +752,34 @@ begin
 		psg_c => psg_c,
 		snd_clk => ck48,
 		osnd => sound
+	);
+
+	rtc:entity mega_st_rtc port map (
+		clk => clk,
+		clken => en8rck,
+		resetn => resetn,
+
+		s_units => rtc_data(3 downto 0),
+		s_tens => rtc_data(7 downto 4),
+		m_units => rtc_data(11 downto 8),
+		m_tens => rtc_data(15 downto 12),
+		h_units => rtc_data(19 downto 16),
+		h_tens => rtc_data(23 downto 20),
+		weekday => rtc_data(27 downto 24),
+		day_units => rtc_data(31 downto 28),
+		day_tens => rtc_data(35 downto 32),
+		mon_units => rtc_data(39 downto 36),
+		mon_tens => rtc_data(43 downto 40),
+		yr_units => rtc_data(47 downto 44),
+		yr_tens => rtc_data(51 downto 48),
+
+		a => bus_A(15 downto 1),
+		id => bus_D(0 downto 0),
+		od => rtc_d,
+		devn => mmu_DEVn,
+		rwn => bus_RWn,
+		vma => cpu_VMAn,
+		lds => bus_LDSn
 	);
 
 end structure;

@@ -118,6 +118,7 @@ architecture structure of zest_atari_st_core is
 	signal ikbd_j0		: std_logic_vector(4 downto 0);
 	signal ikbd_j1		: std_logic_vector(4 downto 0);
 	signal ikbd_k		: std_logic_vector(95 downto 0);
+	signal rtc_data		: std_logic_vector(51 downto 0);
 
 	signal cfg_extmod	: std_logic;
 	signal cfg_romsize	: std_logic_vector(1 downto 0);
@@ -242,6 +243,7 @@ begin
 	in_reg1 <= (others => '0');
 	select0 <= fdd_drv0_select or not enable0;
 	select1 <= fdd_drv1_select or not enable1;
+	rtc_data <= out_reg3(23 downto 0) & out_reg2(27 downto 0);
 
 	datax: for i in 0 to N_OUTPUTS-1 generate
 		dev_r_datax((2**DATA_WIDTH_BITS)*(i+1)-1 downto (2**DATA_WIDTH_BITS)*i) <= dev_r_data(i);
@@ -334,6 +336,7 @@ begin
 		cfg_extmod => cfg_extmod,
 		cfg_romsize => cfg_romsize,
 		cfg_turbo => cfg_turbo,
+		rtc_data => rtc_data,
 		pclken => pclken,
 		de => st_de,
 		hsync => st_hsync,

@@ -22,6 +22,7 @@ entity atarist_bus is
 	port (
 		cpu_d		: in std_logic_vector(15 downto 0);
 		cpu_e		: in std_logic;
+		rtc_d		: in std_logic_vector(3 downto 0);
 		shifter_od	: in std_logic_vector(15 downto 0);
 		shifter_e	: in std_logic;
 		ram_d		: in std_logic_vector(15 downto 0);
@@ -67,6 +68,7 @@ bus_d <= (cpu_d or (15 downto 0 => cpu_e)) and shifter_od
 		and ((acia_ikbd_d or (7 downto 0 => acia_ikbd_e nand cpu_e)) & x"ff")
 		and ((acia_midi_d or (7 downto 0 => acia_midi_e nand cpu_e)) & x"ff")
 		and ((psg_d or (7 downto 0 => psg_e)) & x"ff")
+		and (x"fff" & rtc_d)
 		and dma_d;
 d <= bus_d;
 

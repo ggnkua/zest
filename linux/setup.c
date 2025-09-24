@@ -29,6 +29,7 @@
 #include <pthread.h>
 #include <limits.h> // for PATH_MAX
 #include <signal.h>
+#include <time.h>
 
 #include "menu.h"
 #include "config.h"
@@ -60,6 +61,31 @@ static int sound_mute = 0;
 static int sound_vol = 16;
 
 static int cfg_romsize = 0;	// 0:192k 1:256k 2:512k 3:1M
+
+static void *thread_rtc(void *) {
+  while (!thr_end) {
+    time_t t = time(NULL);
+    struct tm *tm = localtime(&t);
+    // printf("%ld %4d-%02d-%02d %02d:%02d:%02d\n",(long int)t,tm->tm_year+1900,tm->tm_mon+1,tm->tm_mday,tm->tm_hour,tm->tm_min,tm->tm_sec);
+    unsigned int s_units = tm->tm_sec%10;
+    unsigned int s_tens = tm->tm_sec/10;
+    unsigned int m_units = tm->tm_min%10;
+    unsigned int m_tens = tm->tm_min/10;
+    unsigned int h_units = tm->tm_hour%10;
+    unsigned int h_tens = tm->tm_hour/10;
+    unsigned int weekday = tm->tm_wday+1;
+    unsigned int day_units = tm->tm_mday%10;
+    unsigned int day_tens = tm->tm_mday/10;
+    unsigned int mon_units = (tm->tm_mon+1)%10;
+    unsigned int mon_tens = (tm->tm_mon+1)/10;
+    unsigned int yr_units = (tm->tm_year+20)%10;
+    unsigned int yr_tens = (tm->tm_year+20)%100/10;
+    parmreg[2] = weekday<<24 | h_tens<<20 | h_units<<16 | m_tens<<12 | m_units<<8 | s_tens<<4 | s_units;
+    parmreg[3] = yr_tens<<20 | yr_units<<16 | mon_tens<<12 | mon_units<<8 | day_tens<<4 | day_units;
+    usleep(200000);
+  }
+  return NULL;
+}
 
 static unsigned long read_u32(const unsigned char *p) {
   unsigned long a = *p++;
@@ -323,6 +349,8 @@ int main(int argc, char **argv) {
   pthread_create(&infomsg_thr,NULL,thread_infomsg,NULL);
   pthread_t jukebox_thr;
   pthread_create(&jukebox_thr,NULL,thread_jukebox,NULL);
+  pthread_t rtc_thr;
+  pthread_create(&rtc_thr,NULL,thread_rtc,NULL);
 
   struct sigaction sa = {0};
   sa.sa_handler = signal_handler;
@@ -339,6 +367,7 @@ int main(int argc, char **argv) {
   pthread_join(midi_thr,NULL);
   pthread_join(infomsg_thr,NULL);
   pthread_join(jukebox_thr,NULL);
+  pthread_join(rtc_thr,NULL);
   if (has_sil) {
     hdmi_stop();
   }

@@ -43,6 +43,7 @@ proc checkRequiredFiles { origin_dir} {
  "[file normalize "$origin_dir/hdl/osd.vhd"]"\
  "[file normalize "$origin_dir/hdl/scan_dbl.vhd"]"\
  "[file normalize "$origin_dir/hdl/vclkconvert.vhd"]"\
+ "[file normalize "$origin_dir/hdl/mega_st_rtc.vhd"]"\
  "[file normalize "$origin_dir/hdl/zest_atari_st_core.vhd"]"\
  "[file normalize "$origin_dir/hdl/zhdmi/hdl/zhdmi_audio_packetizer.vhd"]"\
  "[file normalize "$origin_dir/hdl/zhdmi/hdl/zhdmi_packet_gen.vhd"]"\
@@ -211,6 +212,7 @@ set files [list \
  [file normalize "${origin_dir}/hdl/osd.vhd"] \
  [file normalize "${origin_dir}/hdl/scan_dbl.vhd"] \
  [file normalize "${origin_dir}/hdl/vclkconvert.vhd"] \
+ [file normalize "${origin_dir}/hdl/mega_st_rtc.vhd"] \
  [file normalize "${origin_dir}/hdl/zest_atari_st_core.vhd"] \
  [file normalize "${origin_dir}/hdl/zhdmi/hdl/zhdmi_audio_packetizer.vhd"] \
  [file normalize "${origin_dir}/hdl/zhdmi/hdl/zhdmi_packet_gen.vhd"] \
@@ -390,6 +392,12 @@ set_property -name "file_type" -value "VHDL" -objects $file_obj
 set_property -name "library" -value "work" -objects $file_obj
 
 set file "$origin_dir/hdl/vclkconvert.vhd"
+set file [file normalize $file]
+set file_obj [get_files -of_objects [get_filesets sources_1] [list "*$file"]]
+set_property -name "file_type" -value "VHDL" -objects $file_obj
+set_property -name "library" -value "work" -objects $file_obj
+
+set file "$origin_dir/hdl/mega_st_rtc.vhd"
 set file [file normalize $file]
 set file_obj [get_files -of_objects [get_filesets sources_1] [list "*$file"]]
 set_property -name "file_type" -value "VHDL" -objects $file_obj
