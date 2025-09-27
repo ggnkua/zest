@@ -62,30 +62,9 @@ static int sound_vol = 16;
 
 static int cfg_romsize = 0;	// 0:192k 1:256k 2:512k 3:1M
 
-static void *thread_rtc(void *) {
-  while (!thr_end) {
-    time_t t = time(NULL);
-    struct tm *tm = localtime(&t);
-    // printf("%ld %4d-%02d-%02d %02d:%02d:%02d\n",(long int)t,tm->tm_year+1900,tm->tm_mon+1,tm->tm_mday,tm->tm_hour,tm->tm_min,tm->tm_sec);
-    unsigned int s_units = tm->tm_sec%10;
-    unsigned int s_tens = tm->tm_sec/10;
-    unsigned int m_units = tm->tm_min%10;
-    unsigned int m_tens = tm->tm_min/10;
-    unsigned int h_units = tm->tm_hour%10;
-    unsigned int h_tens = tm->tm_hour/10;
-    unsigned int weekday = tm->tm_wday+1;
-    unsigned int day_units = tm->tm_mday%10;
-    unsigned int day_tens = tm->tm_mday/10;
-    unsigned int mon_units = (tm->tm_mon+1)%10;
-    unsigned int mon_tens = (tm->tm_mon+1)/10;
-    unsigned int yr_units = (tm->tm_year+20)%10;
-    unsigned int yr_tens = (tm->tm_year+20)%100/10;
-    parmreg[2] = weekday<<24 | h_tens<<20 | h_units<<16 | m_tens<<12 | m_units<<8 | s_tens<<4 | s_units;
-    parmreg[3] = yr_tens<<20 | yr_units<<16 | mon_tens<<12 | mon_units<<8 | day_tens<<4 | day_units;
-    usleep(200000);
-  }
-  return NULL;
-}
+static uint8_t *mem_array;
+
+static unsigned long rom_addr;
 
 static unsigned long read_u32(const unsigned char *p) {
   unsigned long a = *p++;
@@ -99,6 +78,51 @@ static unsigned long read_u16(const unsigned char *p) {
   unsigned long a = *p++;
   unsigned long b = *p++;
   return a<<8 | b;
+}
+
+static void *thread_rtc(void *) {
+  while (!thr_end) {
+    unsigned int s_units,s_tens,m_units,m_tens,h_units,h_tens,weekday,day_units,day_tens,mon_units,mon_tens,yr_units,yr_tens;
+    time_t t = time(NULL);
+    if (t>315532800) {
+      // date is older than 1980-1-1
+      struct tm *tm = localtime(&t);
+      // printf("%ld %4d-%02d-%02d %02d:%02d:%02d\n",(long int)t,tm->tm_year+1900,tm->tm_mon+1,tm->tm_mday,tm->tm_hour,tm->tm_min,tm->tm_sec);
+      s_units = tm->tm_sec%10;
+      s_tens = tm->tm_sec/10;
+      m_units = tm->tm_min%10;
+      m_tens = tm->tm_min/10;
+      h_units = tm->tm_hour%10;
+      h_tens = tm->tm_hour/10;
+      weekday = tm->tm_wday+1;
+      day_units = tm->tm_mday%10;
+      day_tens = tm->tm_mday/10;
+      mon_units = (tm->tm_mon+1)%10;
+      mon_tens = (tm->tm_mon+1)/10;
+      yr_units = (tm->tm_year+20)%10;
+      yr_tens = (tm->tm_year+20)%100/10;
+    } else {
+      // date has not been set: use TOS date
+      unsigned long date = read_u32(mem_array+rom_addr+24);
+      s_units = 0;
+      s_tens = 0;
+      m_units = 0;
+      m_tens = 0;
+      h_units = 0;
+      h_tens = 0;
+      weekday = 1;
+      day_units = date>>16 & 0xf;
+      day_tens = date>>20 & 0xf;
+      mon_units = date>>24 & 0xf;
+      mon_tens = date>>28 & 0xf;
+      yr_units = date & 0xf;
+      yr_tens = ((date>>4 & 0xf)+2)%10;
+    }
+    parmreg[2] = weekday<<24 | h_tens<<20 | h_units<<16 | m_tens<<12 | m_units<<8 | s_tens<<4 | s_units;
+    parmreg[3] = yr_tens<<20 | yr_units<<16 | mon_tens<<12 | mon_units<<8 | day_tens<<4 | day_units;
+    usleep(200000);
+  }
+  return NULL;
 }
 
 static void setup_cfg(unsigned int reset) {
@@ -152,8 +176,6 @@ void pl_reset(void) {
   close(fd);
 }
 
-static uint8_t *mem_array;
-
 void cold_reset() {
   // "press" the reset button
   setup_cfg(2); // Bit 0 clear=reset
@@ -196,7 +218,6 @@ void set_sound_mute(int x) {
 
 int load_rom(const char *filename) {
   unsigned char buf[0x40];
-  unsigned long rom_addr;
   unsigned int rom_size;
   int is_emutos = 0;
   int tos_version = 0;
