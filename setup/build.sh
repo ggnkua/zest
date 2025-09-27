@@ -1,6 +1,6 @@
 #!/bin/sh
 
-TARGETS="z7lite_7010 z7lite_7020 te0726 te0727"
+TARGETS="z7lite_7010 z7lite_7020 te0726"
 
 export XILINX_PATH=/opt/Xilinx
 export XILINX_VERSION=2024.1
