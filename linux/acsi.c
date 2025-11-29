@@ -1,5 +1,5 @@
 /*
- * hdd.c - hard disk drive emulation (software part)
+ * acsi.c - ACSI interface and hard disk drive emulation (software part)
  *
  * Copyright (c) 2023-2025 Francois Galea <fgalea at free.fr>
  * This program is free software: you can redistribute it and/or modify
@@ -22,8 +22,12 @@
 #include <fcntl.h>
 #include <unistd.h>
 
-#include "hdd.h"
+#include "acsi.h"
+#include "gemdos.h"
 #include "config.h"
+
+extern const unsigned char gdboot_img[];
+extern unsigned int gdboot_img_lba;
 
 /* ACSI status codes */
 #define STATUS_OK    0
@@ -38,9 +42,8 @@
 #define ERROR_INVARG   0x240005          /* Invalid argument */
 #define ERROR_INVLUN   0x250005          /* Invalid LUN */
 
-
-static volatile uint32_t *acsireg;
-static volatile uint32_t *iobuf;
+volatile uint32_t *acsireg;
+volatile uint32_t *iobuf;
 
 static struct __acsi_disk {
   int fd;           // disk image file handle
@@ -49,6 +52,8 @@ static struct __acsi_disk {
   unsigned int sense;
   int report_lba;   // report LBA in sense data
 } acsi_disk[8];
+
+static int gemdos_id;
 
 static void clear_sense_data(int acsi_id) {
   acsi_disk[acsi_id].sense = 0;
@@ -80,7 +85,7 @@ void hdd_changeimg(int acsi_id, const char *full_pathname) {
   openimg(acsi_id, full_pathname);
 }
 
-void hdd_init(volatile uint32_t *parmreg) {
+void acsi_init(volatile uint32_t *parmreg) {
   int i;
   acsireg = (void*)(((uint8_t*)parmreg)+0x4000);
   iobuf = acsireg + (0x800/4);
@@ -89,16 +94,24 @@ void hdd_init(volatile uint32_t *parmreg) {
     openimg(i,config.acsi[i]);
     clear_sense_data(i);
   }
+  for (i=0;i<8;++i) {
+    if (acsi_disk[i].fd == -1) {
+      gemdos_id = i;
+      break;
+    }
+  }
+  gemdos_init();
 }
 
-void hdd_exit(void) {
+void acsi_exit(void) {
   int i;
+  gemdos_exit();
   for (i=0;i<8;++i) {
     closeimg(i);
   }
 }
 
-static unsigned char command[10];
+uint8_t acsi_command[10];
 static int dev_id = 0;
 static int cmd_ext = 0;
 static int cmd_size = 0;
@@ -126,14 +139,19 @@ static void read_next(int bsize) {
     if (--dma_rem_sectors>0) {
       dma_buf_id ^= 1;
       int offset = dma_buf_id*512;
-      read(acsi_disk[dev_id].fd,((char*)iobuf)+offset,512);
+      if (dev_id==gemdos_id) {
+        memcpy(((char*)iobuf)+offset,gdboot_img+gdboot_img_lba*512,512);
+        ++gdboot_img_lba;
+      } else {
+        read(acsi_disk[dev_id].fd,((char*)iobuf)+offset,512);
+      }
     }
   }
 }
 
-static void write_first(void) {
+static void write_first(int n_bytes) {
   // initiate initial DMA write
-  int nbs = 31;
+  int nbs = (n_bytes-1)/16;
   *acsireg = 0x200 | nbs<<3 | dma_buf_id;
 }
 
@@ -143,22 +161,38 @@ static void write_next(void) {
   if (--dma_rem_sectors>0) {
     *acsireg = 0x200 | nbs<<3 | (1-dma_buf_id);
   }
-  ++acsi_disk[dev_id].lba;
-  write(acsi_disk[dev_id].fd,((char*)iobuf)+dma_buf_id*512,512);
-  dma_buf_id ^= 1;
-  if (dma_rem_sectors==0) {
-    // finish command
-    *acsireg = STATUS_OK;
-    dma_mode = 0;
+  if (dev_id==gemdos_id) {
+    if (acsi_command[0]==0x11) {
+      dma_mode = 0;
+      gemdos_stub_call();
+    }
+  } else {
+    ++acsi_disk[dev_id].lba;
+    write(acsi_disk[dev_id].fd,((char*)iobuf)+dma_buf_id*512,512);
+    dma_buf_id ^= 1;
+    if (dma_rem_sectors==0) {
+      // finish command
+      *acsireg = STATUS_OK;
+      dma_mode = 0;
+    }
   }
 }
 
-static void send_reply(const uint8_t *data, int size) {
+// initiate an ACSI DMA transfer from ST to host (DMA write)
+void acsi_wait_data(int n_bytes) {
+  dma_rem_sectors = (n_bytes+511)/512;
+  dma_mode = 2;
+  dma_buf_id = 0;
+  write_first(n_bytes>512?512:n_bytes);
+}
+
+// initiate an ACSI DMA transfer from host to ST (DMA read)
+void acsi_send_reply(const void *data, int size) {
   dma_mode = 1;
   dma_buf_id = 0;
-  dma_rem_sectors = 1;
+  dma_rem_sectors = (size+511)/512;
   memcpy((void*)iobuf,data,size);
-  read_next(size);
+  read_next(size>512?512:size);
 }
 
 // determine the command size depending on its header byte
@@ -220,7 +254,7 @@ void mode_sense_4(uint8_t *outBuf) {
   outBuf[5] = heads;
 }
 
-void hdd_interrupt(void) {
+void acsi_interrupt(void) {
   unsigned int reg = *acsireg;
 
   if (dma_mode==1) {
@@ -255,7 +289,7 @@ void hdd_interrupt(void) {
       // command byte
       dev_id = d>>5;
       // ignore command if no image is set up for the device ID
-      if (acsi_disk[dev_id].fd==-1) return;
+      if (acsi_disk[dev_id].fd==-1 && dev_id!=gemdos_id) return;
       cmd = d&0x1f;
       if (cmd==0x1f) {
         // ICD command extension
@@ -264,22 +298,33 @@ void hdd_interrupt(void) {
         return;
       }
     }
-    if (cmd!=0 && cmd!=3 && cmd!=8 && cmd!=0x0a && cmd!=0x12 && cmd!=0x1a && cmd!=0x25) {
-      set_error(ERROR_OPCODE,0);
-      return;
+    if (dev_id==gemdos_id) {
+      if (cmd!=0 && cmd!=3 && cmd!=8 && cmd!=0x11 && cmd!=0x12) {
+        set_error(ERROR_OPCODE,0);
+        return;
+      }
+    } else {
+      if (cmd!=0 && cmd!=3 && cmd!=8 && cmd!=0x0a && cmd!=0x12 && cmd!=0x1a && cmd!=0x25) {
+        set_error(ERROR_OPCODE,0);
+        return;
+      }
     }
     cmd_size = command_size(cmd);
-    command[cmd_rd_idx++] = cmd;
+    acsi_command[cmd_rd_idx++] = cmd;
   } else {
-    command[cmd_rd_idx++] = d;
+    acsi_command[cmd_rd_idx++] = d;
   }
 
   struct __acsi_disk *img = &acsi_disk[dev_id];
   if (cmd_rd_idx==cmd_size) {
     cmd_rd_idx = 0;
     cmd_ext = 0;
-    int cmd = command[0];
-    if (cmd==0) {
+    int cmd = acsi_command[0];
+    if (dev_id==gemdos_id) {
+      gemdos_acsi_cmd();
+      return;
+    }
+    else if (cmd==0) {
       // send response, no error
       *acsireg = STATUS_OK;
       return;
@@ -287,7 +332,7 @@ void hdd_interrupt(void) {
     else if (cmd==3) {
       // request sense
       uint8_t data[256];
-      unsigned int length = command[4];
+      unsigned int length = acsi_command[4];
       if (length<4) {
         length = 4;
       }
@@ -314,14 +359,14 @@ void hdd_interrupt(void) {
         data[12] = (img->sense>>16)&0xff;  // additional sense code
         data[13] = (img->sense>>8)&0xff;   // additional sense code qualifier
       }
-      send_reply(data,length);
+      acsi_send_reply(data,length);
       clear_sense_data(dev_id);
       return;
     }
     else if (cmd==8) {
       // read
-      img->lba = (command[1]<<8|command[2])<<8|command[3];
-      dma_rem_sectors = command[4];
+      img->lba = (acsi_command[1]<<8|acsi_command[2])<<8|acsi_command[3];
+      dma_rem_sectors = acsi_command[4];
       if (img->lba >= img->sectors) {
         set_error(ERROR_INVADDR,1);
         return;
@@ -340,8 +385,7 @@ void hdd_interrupt(void) {
     }
     else if (cmd==0x0a) {
       // write
-      int sector = (command[1]<<8|command[2])<<8|command[3];
-      dma_rem_sectors = command[4];
+      int sector = (acsi_command[1]<<8|acsi_command[2])<<8|acsi_command[3];
       if (img->lba >= img->sectors) {
         img->lba = sector;
         set_error(ERROR_INVADDR,1);
@@ -352,10 +396,8 @@ void hdd_interrupt(void) {
         set_error(ERROR_INVADDR,1);
         return;
       }
-      dma_mode = 2;
-      dma_buf_id = 0;
       lseek(img->fd,sector*512,SEEK_SET);
-      write_first();
+      acsi_wait_data(acsi_command[4]*512);
       return;
     }
     else if (cmd==0x12) {
@@ -365,23 +407,23 @@ void hdd_interrupt(void) {
         "zeST    "
         "EmulatedHarddisk"
         "0100" "\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00";
-      int alloc = command[3]<<8 | command[4];
+      int alloc = acsi_command[3]<<8 | acsi_command[4];
       if (alloc>48) alloc = 48;
-      send_reply(data,alloc);
+      acsi_send_reply(data,alloc);
       return;
     }
     else if (cmd==0x1a) {
       // mode sense
       // Borrowed from acsi2stm who borrowed from Hatari
       uint8_t data[48];
-      switch (command[2]) {
+      switch (acsi_command[2]) {
       case 0:
         mode_sense_0(data);
-        send_reply(data,16);
+        acsi_send_reply(data,16);
         break;
       case 4:
         mode_sense_4(data);
-        send_reply(data,24);
+        acsi_send_reply(data,24);
         break;
       case 0x3f:
         data[0] = 43;
@@ -390,7 +432,7 @@ void hdd_interrupt(void) {
         data[3] = 0;
         mode_sense_4(data+4);
         mode_sense_0(data+28);
-        send_reply(data,44);
+        acsi_send_reply(data,44);
         break;
       default:
         set_error(ERROR_INVARG,0);
@@ -404,7 +446,7 @@ void hdd_interrupt(void) {
         lba>>24, lba>>16, lba>>8, lba,  // logical block address
         0, 0, 2, 0,                     // block size = 512 bytes
       };
-      send_reply(data,8);
+      acsi_send_reply(data,8);
       return;
     }
 

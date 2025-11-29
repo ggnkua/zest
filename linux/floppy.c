@@ -30,7 +30,7 @@
 
 #include "config.h"
 #include "floppy_img.h"
-#include "hdd.h"
+#include "acsi.h"
 #include "midi.h"
 
 extern volatile uint32_t *parmreg;
@@ -151,7 +151,7 @@ void * thread_floppy(void * arg) {
   struct sched_param param = { .sched_priority = 1 };
   pthread_setschedparam(pthread_self(),SCHED_FIFO,&param);
 
-  hdd_init(parmreg);
+  acsi_init(parmreg);
 
   change_floppy(config.floppy_a,0);
   change_floppy(config.floppy_b,1);
@@ -191,7 +191,7 @@ void * thread_floppy(void * arg) {
       floppy_interrupt(in);
     }
     if (hdd_drq) {
-      hdd_interrupt();
+      acsi_interrupt();
     }
     if (midi_intr) {
       midi_interrupt();
@@ -200,7 +200,7 @@ void * thread_floppy(void * arg) {
 
   change_floppy(NULL,0);
   change_floppy(NULL,1);
-  hdd_exit();
+  acsi_exit();
 
   return NULL;
 }

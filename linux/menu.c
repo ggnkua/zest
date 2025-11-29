@@ -26,7 +26,7 @@
 #include "config.h"
 #include "setup.h"
 #include "floppy.h"
-#include "hdd.h"
+#include "acsi.h"
 #include "infomsg.h"
 #include "midi.h"
 

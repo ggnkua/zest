@@ -120,6 +120,8 @@ static int handler(void* user, const char* section, const char* name, const char
         pconfig->acsi[id] = strdup(value);
       }
     }
+  } else if (MATCH("hdd","gemdos")) {
+    if (value) pconfig->gemdos = strdup(value);
   } else if (MATCH("keyboard","right_alt_is_altgr")) {
     if (value) pconfig->right_alt_is_altgr = truefalse(value);
   } else if (MATCH("midi","in")) {
@@ -164,6 +166,7 @@ void config_init(void) {
   for (i=0;i<8;++i) {
     config.acsi[i] = NULL;
   }
+  config.gemdos = NULL;
   config.right_alt_is_altgr = 0;
   config.midi_in = NULL;
   config.midi_out = NULL;
@@ -219,7 +222,7 @@ void config_save(void) {
     fprintf(fd,"floppy_b_write_protect = %s\n",config.floppy_b_write_protect?"true":"false");
   }
 
-  int hdd_section = 0;
+  int hdd_section = config.gemdos!=NULL;
   for (i=0;i<8;++i) {
     if (config.acsi[i])
       hdd_section = 1;
@@ -230,6 +233,8 @@ void config_save(void) {
       if (config.acsi[i])
         fprintf(fd,"acsi%d = %s\n",i,config.acsi[i]?config.acsi[i]:"");
     }
+    if (config.gemdos)
+      fprintf(fd,"gemdos = %s\n",config.gemdos);
   }
 
   fprintf(fd,"\n[keyboard]\n");

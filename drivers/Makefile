@@ -5,17 +5,20 @@ PROGS=extmod.prg
 AS=vasmm68k_mot
 ASOPT=-m68000 -Ftos -tos-flags=7 -nosym
 
-all: $(TARGETS) $(PROGS)
+all: $(TARGETS) $(PROGS) $(BIN)
 
 clean:
-	rm -f $(TARGETS) $(PROGS) *.o
+	rm -f $(TARGETS) $(PROGS) $(BIN) *.o
 
-%.st: $(PROGS)
-	hmsa $@ SS
-	sudo mount -oloop -tmsdos $@ /mnt
-	sudo mkdir -p /mnt/auto
-	sudo cp $^ /mnt/auto
-	sudo umount /mnt
+drivers.st: $(PROGS)
+	dd if=/dev/zero of=$@ count=1640
+	mformat -i $@ -a -t 82 -s 10 -h 2
+	mmd -i $@ ::auto
+	mcopy -i $@ $^ ::auto
+
+%.msa: %.st
+	rm -f $@
+	hmsa $< || true
 
 %.xz: %
 	xz -f9 $<

@@ -54,6 +54,7 @@ typedef struct {
 
   // hard disk
   const char *acsi[8];              // Hard disk images
+  const char *gemdos;               // GEMDOS drive
 
   // keyboard
   int right_alt_is_altgr;           // right alt = 1:Milan AltGr code, 0:Alternate

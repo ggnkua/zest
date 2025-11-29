@@ -1,5 +1,5 @@
 /*
- * hdd.h - hard disk drive emulation (software part)
+ * acsi.h - ACSI interface and hard disk drive emulation (software part)
  *
  * Copyright (c) 2023-2025 Francois Galea <fgalea at free.fr>
  * This program is free software: you can redistribute it and/or modify
@@ -16,14 +16,16 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef __HDD_H__
-#define __HDD_H__
+#ifndef __ACSI_H__
+#define __ACSI_H__
 
-void hdd_init(volatile uint32_t *parmreg);
+extern uint8_t acsi_command[10];
 
-void hdd_exit(void);
+void acsi_init(volatile uint32_t *parmreg);
 
-void hdd_interrupt(void);
+void acsi_exit(void);
+
+void acsi_interrupt(void);
 
 void hdd_changeimg(int acsi_id, const char *full_pathname);
 
