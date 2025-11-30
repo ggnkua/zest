@@ -546,6 +546,7 @@ static void fsfirst(unsigned int pname, unsigned int attr) {
   memcpy(dta.d_reserved,"zeST",4);
   memcpy(dta.d_reserved+4,&fs,sizeof fs);
   memcpy(dta.d_reserved+12,"zeST",4);
+  gemdos_write_memory(&dta,addr_dta,16);
 
   next_file();
 }
