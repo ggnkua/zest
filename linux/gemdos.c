@@ -592,7 +592,7 @@ static void fsetdta(unsigned int addr) {
 
 // on Fopen, open the corresponding file and return a custom handle
 // that equals to 0x7a00 + host handle
-static void _fopen(unsigned int pname, unsigned int mode) {
+static void Fopen(unsigned int pname, unsigned int mode) {
   char path_gemdos[1024];
   char path_host[1024];
   static const int opmode[] = { O_RDONLY, O_WRONLY, O_RDWR };
@@ -631,7 +631,40 @@ static void _fopen(unsigned int pname, unsigned int mode) {
   gemdos_return(0x7a00+handle);
 }
 
-static void _fclose(int handle) {
+static void Fcreate(unsigned int pname, unsigned int attr) {
+  char path_gemdos[1024];
+  char path_host[1024];
+  action_required();
+  strncpy(path_gemdos,gemdos_read_string(pname),sizeof path_gemdos);
+  printf("Fcreate(\"%s\",%#x)\n",path_gemdos,attr);
+
+  int retval = path_lookup(path_host,path_gemdos);
+  if (retval==-2) {
+    // not on managed drive
+    gemdos_fallback();
+    return;
+  }
+  if (retval==-1) {
+    // invalid path
+    gemdos_return(-34);   // EPTHNF
+    return;
+  }
+  if (retval==0) {
+    // directory found in place of the file
+    gemdos_return(-36);   // EACCDN
+    return;
+  }
+  int handle = open(path_host,O_CREAT|O_WRONLY|O_TRUNC);
+  if (handle==-1) {
+    // access denied
+    gemdos_return(-36);   // EACCDN
+    return;
+  }
+  // return our custom handle
+  gemdos_return(0x7a00+handle);
+}
+
+static void Fclose(int handle) {
   printf("Fclose(%d)\n",handle);
   if (handle<0x7a00) {
     // not locally managed file
@@ -649,6 +682,16 @@ static void _fclose(int handle) {
     return;
   }
   gemdos_return(-65);   // EINTRN
+}
+
+static void Fread(int handle, unsigned int length, unsigned int bufaddr) {
+  printf("Fread(%d,%d,%#x)\n",handle,length,bufaddr);
+  no_action_required();
+}
+
+static void Fwrite(int handle, unsigned int length, unsigned int bufaddr) {
+  printf("Fwrite(%d,%d,%#x)\n",handle,length,bufaddr);
+  no_action_required();
 }
 
 // Called by stub at initialisation
@@ -685,24 +728,19 @@ static void *gemdos_thread(void *ptr) {
         dsetpath(read_u32(buf+2));
         break;
       case 0x3c:  // Fcreate
-        int attr = read_u16(buf+6);
-        action_required();
-        printf("Fcreate(\"%s\",%#x)\n",gemdos_read_string(read_u32(buf+2)),attr);
-        gemdos_fallback();
+        Fcreate(read_u32(buf+2),read_u16(buf+6));
         break;
       case 0x3d:  // Fopen
-        _fopen(read_u32(buf+2),read_u16(buf+6));
+        Fopen(read_u32(buf+2),read_u16(buf+6));
         break;
       case 0x3e:  // Fclose
-        _fclose(read_u16(buf+2));
+        Fclose(read_u16(buf+2));
         break;
       case 0x3f:  // Fread
-        printf("Fread(%d,%d,%#x)\n",read_u16(buf+2),read_u32(buf+4),read_u32(buf+8));
-        no_action_required();
+        Fread(read_u16(buf+2),read_u32(buf+4),read_u32(buf+8));
         break;
       case 0x40:  // Fwrite
-        printf("Fwrite(%d,%d,%#x)\n",read_u16(buf+2),read_u32(buf+4),read_u32(buf+8));
-        no_action_required();
+        Fwrite(read_u16(buf+2),read_u32(buf+4),read_u32(buf+8));
         break;
       case 0x41:  // Fdelete
         action_required();
