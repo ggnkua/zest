@@ -327,11 +327,28 @@ static int filename_lookup(char *dest, const char *dir, const char *fname) {
   return e==NULL;
 }
 
-// convert DOS path to UNIX path, according to existing directories on the filesystem
+// resolve DOS path to UNIX path, according to existing directories on the filesystem
+// and current working drive and directory
 // path is in form \SOME\DIR (absolute) or SOME\SUBDIR (relative)
-// returns 0 on success (path exists on filesystem)
+// and may be preceded by a drive specification (A:,C:,etc)
+// returns:
+//  - -2: not on managed drive
+//  - -1: path is invalid
+//  - 0: path is a valid directory path
+//  - 1: path is a valid file path
+//  - 2: path contains a valid directory path then an unexisting file
 static int path_lookup(char *search_path, char *src) {
   char realname[256];
+  if (src[1]==':') {
+    if (src[0]-'A'==gemdos_drv) {
+      src += 2;
+    } else {
+      return -2;
+    }
+  }
+  else if (current_drv!=gemdos_drv) {
+    return -2;
+  }
   if (src[0]=='\\') {
     // absolute path
     strcpy(search_path,config.gemdos);
@@ -343,19 +360,32 @@ static int path_lookup(char *search_path, char *src) {
   int len = strlen(search_path);
 
   // for each directory in the source path, look for the corresponding one on the filesystem
-  char *dirname = strtok(src,"\\");
+  const char *dirname = strtok(src,"\\");
+  struct stat st;
   while (dirname) {
+    char *next = strtok(NULL,"\\");
     if (!filename_lookup(realname,search_path,dirname)) {
-      struct stat st;
       search_path[len++] = '/';
       strcpy(search_path+len,realname);
-      if (stat(search_path,&st) || (st.st_mode&S_IFMT)!=S_IFDIR) {
-        return 1;
+      if (next && (stat(search_path,&st) || (st.st_mode&S_IFMT)!=S_IFDIR)) {
+        return -1;
       }
       len += strlen(realname);
+    } else {
+      return -1;
     }
-    dirname = strtok(NULL,"\\");
+    dirname = next;
   }
+  // directory is valid. now, special treatment in last name of the file
+  if (!stat(search_path,&st)) {
+    // file does not exist
+    return 2;
+  }
+  if ((st.st_mode&S_IFMT)!=S_IFDIR) {
+    // not a directory
+    return 1;
+  }
+  // valid directory
   return 0;
 }
 
@@ -494,39 +524,29 @@ static void next_file(void) {
 static void fsfirst(unsigned int pname, unsigned int attr) {
   char path_gemdos[1024];
   char path_host[1024];
-  int ok = 0;
   action_required();
   strncpy(path_gemdos,gemdos_read_string(pname),sizeof path_gemdos);
   printf("Fsfirst(\"%s\",%d)\n",path_gemdos,attr);
 
-  // detect if accessing our drive
-  char *path = path_gemdos;
-  if (path[1]==':') {
-    if (path[0]-'A'==gemdos_drv) {
-      ok = 1;
-      path += 2;
-    }
-  }
-  else if (current_drv==gemdos_drv) {
-    ok = 1;
-  }
-  if (!ok) {
-    gemdos_fallback();
-    return;
-  }
-
   // separate pattern from path
   char *pattern = strrchr(path_gemdos,'\\');
+  char *path;
   if (pattern==NULL) {
-    pattern = path;
+    pattern = path_gemdos;
     path = "";
   } else {
     *pattern++ = '\0';
+    path = path_gemdos;
   }
 
-  if (path_lookup(path_host,path)) {
-    // path not found
+  int retval = path_lookup(path_host,path);
+  if (retval==-2) {
+    // not on managed drive
     gemdos_fallback();
+    return;
+  } else if (retval==-1 || retval>0) {
+    // invalid path
+    gemdos_return(-33);   // EFILNF
     return;
   }
 
@@ -569,6 +589,68 @@ static void fsetdta(unsigned int addr) {
   }
 }
 
+
+// on Fopen, open the corresponding file and return a custom handle
+// that equals to 0x7a00 + host handle
+static void _fopen(unsigned int pname, unsigned int mode) {
+  char path_gemdos[1024];
+  char path_host[1024];
+  static const int opmode[] = { O_RDONLY, O_WRONLY, O_RDWR };
+  action_required();
+  strncpy(path_gemdos,gemdos_read_string(pname),sizeof path_gemdos);
+  printf("Fopen(\"%s\",%d)\n",path_gemdos,mode);
+
+  int retval = path_lookup(path_host,path_gemdos);
+  if (retval==-2) {
+    // not on managed drive
+    gemdos_fallback();
+    return;
+  }
+  if (retval==-1) {
+    // invalid path
+    gemdos_return(-34);   // EPTHNF
+    return;
+  }
+  if (retval==0 || retval==2) {
+    // directory found or missing file
+    gemdos_return(-33);   // EFILNF
+    return;
+  }
+  if ((mode&7)>2) {
+    // invalid access mode
+    gemdos_return(-36);   // EACCDN
+    return;
+  }
+  int handle = open(path_host,opmode[mode&7]);
+  if (handle==-1) {
+    // file not found. should not happen
+    gemdos_return(-33);   // EFILNF
+    return;
+  }
+  // return our custom handle
+  gemdos_return(0x7a00+handle);
+}
+
+static void _fclose(int handle) {
+  printf("Fclose(%d)\n",handle);
+  if (handle<0x7a00) {
+    // not locally managed file
+    no_action_required();
+    return;
+  }
+  action_required();
+  int retval = close(handle-0x7a00);
+  if (retval==0) {
+    gemdos_return(0);
+    return;
+  }
+  if (errno==EBADF) {
+    gemdos_return(-37);   // EIHNDL
+    return;
+  }
+  gemdos_return(-65);   // EINTRN
+}
+
 // Called by stub at initialisation
 static void drive_init(unsigned int begin_adr, unsigned int resblk_adr) {
   action_required();
@@ -609,14 +691,10 @@ static void *gemdos_thread(void *ptr) {
         gemdos_fallback();
         break;
       case 0x3d:  // Fopen
-        int mode = read_u16(buf+6);
-        action_required();
-        printf("Fopen(\"%s\",%d)\n",gemdos_read_string(read_u32(buf+2)),mode);
-        gemdos_fallback();
+        _fopen(read_u32(buf+2),read_u16(buf+6));
         break;
       case 0x3e:  // Fclose
-        printf("Fclose(%d)\n",read_u16(buf+2));
-        no_action_required();
+        _fclose(read_u16(buf+2));
         break;
       case 0x3f:  // Fread
         printf("Fread(%d,%d,%#x)\n",read_u16(buf+2),read_u32(buf+4),read_u32(buf+8));
@@ -647,7 +725,7 @@ static void *gemdos_thread(void *ptr) {
         no_action_required();
         break;
       case 0x4b:  // Pexec
-        mode = read_u16(buf+2);
+        int mode = read_u16(buf+2);
         unsigned int name = read_u32(buf+4);
         unsigned int cmdline = read_u32(buf+8);
         unsigned int env = read_u32(buf+12);
