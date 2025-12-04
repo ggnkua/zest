@@ -187,12 +187,13 @@ static void action_required(void) {
 
 // get bytes from address (stub must be in action mode)
 // set nbytes to 0 if reading a null-terminated string
-static const uint8_t *gemdos_read_memory(unsigned int addr, unsigned int nbytes) {
+static void gemdos_read_memory(unsigned char *buf, unsigned int addr, unsigned int nbytes) {
+  result = buf;
   // wait for stub to perform an OP_ACTION command
   int ret = gemdos_cond_wait(500);
   if (ret!=0) {
     printf("error gemdos_read_memory\n");
-    return NULL;
+    return;
   }
   write_u16(action,ACTION_RDMEM);
   write_u32(action+2,addr);
@@ -203,10 +204,10 @@ static const uint8_t *gemdos_read_memory(unsigned int addr, unsigned int nbytes)
   ret = gemdos_cond_wait(500);
   if (ret!=0) {
     printf("error gemdos_read_memory 2\n");
-    return NULL;
+    return;
   }
   *acsireg = STATUS_OK;
-  return (const uint8_t*)iobuf;
+  //return (const uint8_t*)iobuf;
 }
 
 // write bytes to address (stub must be in action mode) (generic function)
@@ -245,13 +246,14 @@ static void gemdos_write_long(unsigned int addr, unsigned int val) {
 }
 
 static const char *gemdos_read_string(unsigned int addr) {
-  return (const char*)gemdos_read_memory(addr,0);
+  gemdos_read_memory(NULL,addr,0);
+  return (const char*)iobuf;
 }
 
 static unsigned int gemdos_read_long(unsigned int addr) {
-  return read_u32(gemdos_read_memory(addr,4));
+  gemdos_read_memory(NULL,addr,4);
+  return read_u32((uint8_t*)iobuf);
 }
-
 
 // finish action loop with fall back to GEMDOS
 static void gemdos_fallback(void) {
@@ -587,8 +589,8 @@ static void Fsnext(void) {
 static void Fsetdta(unsigned int addr) {
   if (addr_dta!=addr) {
     action_required();
-    const unsigned char *buf = gemdos_read_memory(addr,sizeof(struct _dta));
-    memcpy(&dta,buf,sizeof(struct _dta));
+    gemdos_read_memory(NULL,addr,sizeof(struct _dta));
+    memcpy(&dta,(void*)iobuf,sizeof(struct _dta));
     addr_dta = addr;
     gemdos_fallback();
   } else {
@@ -693,12 +695,46 @@ static void Fclose(int handle) {
 
 static void Fread(int handle, unsigned int length, unsigned int addr) {
   printf("Fread(%d,%d,%#x)\n",handle,length,addr);
+  if (handle<0x7a00) {
+    // not locally managed file
+    no_action_required();
+    return;
+  }
+  action_required();
+  const int blksz = 512*DMABUFSZ-8;
+  int nread = 0;
 
-  // while (length>0) {
-  //   unsigned int n = length
-  // }
+  while (length>0) {
+    unsigned int n = length<blksz?length:blksz;
 
-  no_action_required();
+    int rdb = read(handle-0x7a00,action+8,n);
+    if (rdb==0) {
+      // end of file
+      break;
+    }
+    if (rdb==-1) {
+      if (errno==EBADF) {
+        gemdos_return(-37);   // EIHNDL
+        return;
+      }
+      gemdos_return(-65);   // EINTRN
+      return;
+    }
+    // wait for stub to perform an OP_ACTION command
+    int ret = gemdos_cond_wait(500);
+    if (ret!=0) {
+      printf("error Fread\n");
+      return;
+    }
+    write_u16(action,ACTION_WRMEM);
+    write_u32(action+2,addr);
+    write_u16(action+6,rdb);
+    acsi_send_reply(action,(8+rdb+15)&-16);
+    nread += rdb;
+    addr += rdb;
+    length -= rdb;
+  }
+  gemdos_return(nread);
 }
 
 static void Fwrite(int handle, unsigned int length, unsigned int addr) {
