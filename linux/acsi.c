@@ -26,9 +26,6 @@
 #include "gemdos.h"
 #include "config.h"
 
-extern const unsigned char gdboot_img[];
-extern unsigned int gdboot_img_lba;
-
 /* ACSI status codes */
 #define STATUS_OK    0
 #define STATUS_ERROR 2
@@ -118,7 +115,8 @@ static int cmd_size = 0;
 static int cmd_rd_idx = 0;
 static int dma_mode = 0;    // 0:idle 1:read 2:write
 static int dma_buf_id = 0;
-static int dma_rem_sectors = 0;
+static int dma_rem_bs = 0;  // remaining 16-byte blocks
+static uint8_t *dma_gemdos_ptr = NULL;
 
 static void set_error(unsigned int err, int report_lba) {
   acsi_disk[dev_id].sense = err;
@@ -126,22 +124,24 @@ static void set_error(unsigned int err, int report_lba) {
   *acsireg = STATUS_ERROR;
 }
 
-static void read_next(int bsize) {
-  if (dma_rem_sectors==0) {
+static void read_next(void) {
+  if (dma_rem_bs==0) {
     // finish command
     *acsireg = STATUS_OK;
     dma_mode = 0;
   } else {
     // initiate DMA read
     ++acsi_disk[dev_id].lba;
-    int nbs = (bsize-1)/16;
-    *acsireg = 0x100 | nbs<<3 | dma_buf_id;
-    if (--dma_rem_sectors>0) {
+    int nbs = dma_rem_bs<32?dma_rem_bs:32;
+    *acsireg = 0x100 | (nbs-1)<<3 | dma_buf_id;
+    dma_rem_bs -= nbs;
+    if (dma_rem_bs>0) {
       dma_buf_id ^= 1;
       int offset = dma_buf_id*512;
+      nbs = dma_rem_bs<32?dma_rem_bs:32;
       if (dev_id==gemdos_id) {
-        memcpy(((char*)iobuf)+offset,gdboot_img+gdboot_img_lba*512,512);
-        ++gdboot_img_lba;
+        memcpy(((char*)iobuf)+offset,dma_gemdos_ptr,nbs*16);
+        dma_gemdos_ptr += 512;
       } else {
         read(acsi_disk[dev_id].fd,((char*)iobuf)+offset,512);
       }
@@ -149,50 +149,56 @@ static void read_next(int bsize) {
   }
 }
 
-static void write_first(int n_bytes) {
-  // initiate initial DMA write
-  int nbs = (n_bytes-1)/16;
-  *acsireg = 0x200 | nbs<<3 | dma_buf_id;
-}
-
 static void write_next(void) {
   // initiate next DMA write
-  int nbs = 31;
-  if (--dma_rem_sectors>0) {
-    *acsireg = 0x200 | nbs<<3 | (1-dma_buf_id);
+  int nbs = dma_rem_bs<32?dma_rem_bs:32;
+  dma_rem_bs -= nbs;
+  if (dma_rem_bs>0) {
+    int nbs = dma_rem_bs<32?dma_rem_bs:32;
+    *acsireg = 0x200 | (nbs-1)<<3 | (1-dma_buf_id);
   }
   if (dev_id==gemdos_id) {
     if (acsi_command[0]==0x11) {
-      dma_mode = 0;
-      gemdos_stub_call();
+      if (dma_gemdos_ptr) {
+        memcpy(dma_gemdos_ptr,((char*)iobuf)+dma_buf_id*512,nbs*16);
+        dma_gemdos_ptr += nbs*16;
+      }
+      if (dma_rem_bs==0) {
+        // finish command
+        dma_mode = 0;
+        gemdos_stub_call();
+      }
     }
   } else {
     ++acsi_disk[dev_id].lba;
     write(acsi_disk[dev_id].fd,((char*)iobuf)+dma_buf_id*512,512);
-    dma_buf_id ^= 1;
-    if (dma_rem_sectors==0) {
+    if (dma_rem_bs==0) {
       // finish command
       *acsireg = STATUS_OK;
       dma_mode = 0;
     }
   }
+  dma_buf_id ^= 1;
 }
 
 // initiate an ACSI DMA transfer from ST to host (DMA write)
-void acsi_wait_data(int n_bytes) {
-  dma_rem_sectors = (n_bytes+511)/512;
+void acsi_wait_data(void *data, int n_bytes) {
   dma_mode = 2;
   dma_buf_id = 0;
-  write_first(n_bytes>512?512:n_bytes);
+  dma_rem_bs = (n_bytes+15)/16;
+  dma_gemdos_ptr = (uint8_t*)data;
+  int nbs = dma_rem_bs<32?dma_rem_bs:32;
+  *acsireg = 0x200 | (nbs-1)<<3 | dma_buf_id;
 }
 
 // initiate an ACSI DMA transfer from host to ST (DMA read)
 void acsi_send_reply(const void *data, int size) {
   dma_mode = 1;
   dma_buf_id = 0;
-  dma_rem_sectors = (size+511)/512;
-  memcpy((void*)iobuf,data,size);
-  read_next(size>512?512:size);
+  dma_rem_bs = (size+15)/16;
+  dma_gemdos_ptr = ((uint8_t*)data)+512;
+  memcpy((void*)iobuf,data,size<512?size:512);
+  read_next();
 }
 
 // determine the command size depending on its header byte
@@ -259,7 +265,7 @@ void acsi_interrupt(void) {
 
   if (dma_mode==1) {
     // a DMA read command is running
-    read_next(512);
+    read_next();
     return;
   }
   if (dma_mode==2) {
@@ -366,12 +372,12 @@ void acsi_interrupt(void) {
     else if (cmd==8) {
       // read
       img->lba = (acsi_command[1]<<8|acsi_command[2])<<8|acsi_command[3];
-      dma_rem_sectors = acsi_command[4];
+      dma_rem_bs = acsi_command[4]*32;
       if (img->lba >= img->sectors) {
         set_error(ERROR_INVADDR,1);
         return;
       }
-      if (img->lba + dma_rem_sectors > img->sectors) {
+      if (img->lba + acsi_command[4] > img->sectors) {
         img->lba = img->sectors;
         set_error(ERROR_INVADDR,1);
         return;
@@ -380,7 +386,7 @@ void acsi_interrupt(void) {
       dma_buf_id = 0;
       lseek(img->fd,img->lba*512,SEEK_SET);
       read(img->fd,(void*)iobuf,512);
-      read_next(512);
+      read_next();
       return;
     }
     else if (cmd==0x0a) {
@@ -391,13 +397,13 @@ void acsi_interrupt(void) {
         set_error(ERROR_INVADDR,1);
         return;
       }
-      if (sector + dma_rem_sectors > img->sectors) {
+      if (sector + acsi_command[4] > img->sectors) {
         img->lba = img->sectors;
         set_error(ERROR_INVADDR,1);
         return;
       }
       lseek(img->fd,sector*512,SEEK_SET);
-      acsi_wait_data(acsi_command[4]*512);
+      acsi_wait_data(NULL,acsi_command[4]*512);
       return;
     }
     else if (cmd==0x12) {

@@ -52,6 +52,9 @@
 #include "acsi.h"
 #include "config.h"
 
+/* DMA buffer size in sectors */
+#define DMABUFSZ 5
+
 /* ACSI status codes */
 #define STATUS_OK    0
 #define STATUS_ERROR 2
@@ -85,6 +88,9 @@
 #define FA_DIR      0x10                /* Include subdirectories */
 #define FA_ARCHIVE  0x20                /* Include files with archive bit set */
 
+static uint8_t action[512*DMABUFSZ];    /* Action buffer */
+static uint8_t *result;                 /* Pointer to returned result data */
+
 struct _dta {
   int8_t    d_reserved[21];             /* Reserved for GEMDOS */
   uint8_t   d_attrib;                   /* File attributes */
@@ -98,11 +104,10 @@ static unsigned int gemdos_drv;         /* 0:A,1:B etc */
 static unsigned int current_drv;        /* 0:A,1:B etc */
 static char current_path[1024];
 
-extern void acsi_wait_data(int n_bytes);
+extern void acsi_wait_data(void *data, int n_bytes);
 extern void acsi_send_reply(const void *data, int size);
 
 extern const unsigned char gdboot_img[];
-unsigned int gdboot_img_lba;
 
 extern volatile uint32_t *acsireg;
 extern volatile uint32_t *iobuf;
@@ -120,6 +125,14 @@ static unsigned int read_u32(const unsigned char *p) {
   unsigned int b = *p++;
   unsigned int c = *p++;
   unsigned int d = *p++;
+  return a<<24 | b<<16 | c<<8 | d;
+}
+
+static int read_i32(const unsigned char *p) {
+  int a = *(signed char*)p;
+  unsigned int b = *++p;
+  unsigned int c = *++p;
+  unsigned int d = *++p;
   return a<<24 | b<<16 | c<<8 | d;
 }
 
@@ -174,8 +187,6 @@ static void action_required(void) {
 // get bytes from address (stub must be in action mode)
 // set nbytes to 0 if reading a null-terminated string
 static const uint8_t *gemdos_read_memory(unsigned int addr, unsigned int nbytes) {
-  uint8_t action[16];
-
   // wait for stub to perform an OP_ACTION command
   int ret = gemdos_cond_wait(500);
   if (ret!=0) {
@@ -187,7 +198,7 @@ static const uint8_t *gemdos_read_memory(unsigned int addr, unsigned int nbytes)
   write_u16(action+6,nbytes);
   acsi_send_reply(action,16);
 
-  // wait for OP_RESULT command and 1 sector from DMA
+  // wait for OP_RESULT command and sectors from DMA
   ret = gemdos_cond_wait(500);
   if (ret!=0) {
     printf("error gemdos_read_memory 2\n");
@@ -200,7 +211,6 @@ static const uint8_t *gemdos_read_memory(unsigned int addr, unsigned int nbytes)
 // write bytes to address (stub must be in action mode) (generic function)
 // ret0: if nonzero, terminate the action loop, having GEMDOS return 0
 static void gemdos_write_memory_generic(const void *buf, unsigned int addr, unsigned int nbytes, int ret0) {
-  uint8_t action[512];
   //printf("gemdos_write_memory %#x\n",addr);
 
   // wait for stub to perform an OP_ACTION command
@@ -244,19 +254,17 @@ static unsigned int gemdos_read_long(unsigned int addr) {
 
 // finish action loop with fall back to GEMDOS
 static void gemdos_fallback(void) {
-  uint8_t action[16];
   write_u16(action,ACTION_FALLBACK);
   // wait for stub to perform an OP_ACTION command
   if (gemdos_cond_wait(500)) {
     printf("error gemdos_fallback\n");
     return;
   }
-  acsi_send_reply(action,sizeof action);
+  acsi_send_reply(action,16);
 }
 
 // finish action loop terminating the GEMDOS call
 static void gemdos_return(int val) {
-  uint8_t action[16];
   write_u16(action,ACTION_RETURN);
   write_u32(action+2,val);
   // wait for stub to perform an OP_ACTION command
@@ -264,10 +272,10 @@ static void gemdos_return(int val) {
     printf("error gemdos_return\n");
     return;
   }
-  acsi_send_reply(action,sizeof action);
+  acsi_send_reply(action,16);
 }
 
-static void pexec(int mode, unsigned int pname, unsigned int pcmdline, int penv) {
+static void Pexec(int mode, unsigned int pname, unsigned int pcmdline, int penv) {
   char name[256],cmdline[256],env[256];
   action_required();
   if (penv==0)
@@ -377,7 +385,7 @@ static int path_lookup(char *search_path, char *src) {
     dirname = next;
   }
   // directory is valid. now, special treatment in last name of the file
-  if (!stat(search_path,&st)) {
+  if (stat(search_path,&st)) {
     // file does not exist
     return 2;
   }
@@ -390,7 +398,7 @@ static int path_lookup(char *search_path, char *src) {
 }
 
 // Dsetpath
-static void dsetpath(unsigned int ppath) {
+static void Dsetpath(unsigned int ppath) {
   char path[1024];
   action_required();
   strncpy(path,gemdos_read_string(ppath),sizeof path);
@@ -521,7 +529,7 @@ static void next_file(void) {
 }
 
 // Fsfirst call
-static void fsfirst(unsigned int pname, unsigned int attr) {
+static void Fsfirst(unsigned int pname, unsigned int attr) {
   char path_gemdos[1024];
   char path_host[1024];
   action_required();
@@ -571,13 +579,13 @@ static void fsfirst(unsigned int pname, unsigned int attr) {
   next_file();
 }
 
-static void fsnext(void) {
+static void Fsnext(void) {
   printf("Fsnext()\n");
   action_required();
   next_file();
 }
 
-static void fsetdta(unsigned int addr) {
+static void Fsetdta(unsigned int addr) {
   if (addr_dta!=addr) {
     action_required();
     const unsigned char *buf = gemdos_read_memory(addr,sizeof(struct _dta));
@@ -684,13 +692,18 @@ static void Fclose(int handle) {
   gemdos_return(-65);   // EINTRN
 }
 
-static void Fread(int handle, unsigned int length, unsigned int bufaddr) {
-  printf("Fread(%d,%d,%#x)\n",handle,length,bufaddr);
+static void Fread(int handle, unsigned int length, unsigned int addr) {
+  printf("Fread(%d,%d,%#x)\n",handle,length,addr);
+
+  // while (length>0) {
+  //   unsigned int n = length
+  // }
+
   no_action_required();
 }
 
-static void Fwrite(int handle, unsigned int length, unsigned int bufaddr) {
-  printf("Fwrite(%d,%d,%#x)\n",handle,length,bufaddr);
+static void Fwrite(int handle, unsigned int length, unsigned int addr) {
+  printf("Fwrite(%d,%d,%#x)\n",handle,length,addr);
   no_action_required();
 }
 
@@ -698,7 +711,7 @@ static void Fwrite(int handle, unsigned int length, unsigned int bufaddr) {
 static void drive_init(unsigned int begin_adr, unsigned int resblk_adr) {
   action_required();
   unsigned int drvbits = gemdos_read_long(0x4c2);
-  printf("Driver init, begin:%#x, resblk:%#x, size:%u, drvbits:%u\n",begin_adr,resblk_adr,resblk_adr-begin_adr+28+512,drvbits);
+  printf("Driver init, begin:%#x, resblk:%#x, size:%u, drvbits:%u\n",begin_adr,resblk_adr,resblk_adr-begin_adr+28+512*BUFSIZ,drvbits);
   gemdos_drv = 2;
   while (drvbits&(1<<gemdos_drv)) ++gemdos_drv;
   gemdos_write_long(0x4c2,drvbits|(1<<gemdos_drv));
@@ -722,10 +735,10 @@ static void *gemdos_thread(void *ptr) {
         no_action_required();
         break;
       case 0x1a:  // Fsetdta
-        fsetdta(read_u32(buf+2));
+        Fsetdta(read_u32(buf+2));
         break;
       case 0x3b:  // Dsetpath
-        dsetpath(read_u32(buf+2));
+        Dsetpath(read_u32(buf+2));
         break;
       case 0x3c:  // Fcreate
         Fcreate(read_u32(buf+2),read_u16(buf+6));
@@ -767,13 +780,13 @@ static void *gemdos_thread(void *ptr) {
         unsigned int name = read_u32(buf+4);
         unsigned int cmdline = read_u32(buf+8);
         unsigned int env = read_u32(buf+12);
-        pexec(mode,name,cmdline,env);
+        Pexec(mode,name,cmdline,env);
         break;
       case 0x4e:  // Fsfirst
-        fsfirst(read_u32(buf+2),read_u16(buf+6));
+        Fsfirst(read_u32(buf+2),read_u16(buf+6));
         break;
       case 0x4f:  // Fsnext
-        fsnext();
+        Fsnext();
         break;
       case 0x56:  // Frename
         char oldname[256];
@@ -837,7 +850,6 @@ void gemdos_acsi_cmd(void) {
       gemdos_disk.sense = ERROR_INVADDR;
       *acsireg = STATUS_ERROR;
     } else {
-      gdboot_img_lba = lba+1;
       acsi_send_reply(gdboot_img+lba*512,n_sectors*512);
     }
   }
@@ -869,7 +881,7 @@ void gemdos_acsi_cmd(void) {
         || gemdos_opcode==0xffff// driver initialisation
       ) {
         // commands with a data block
-        acsi_wait_data(16);
+        acsi_wait_data(NULL,16);
       } else {
         // Ignore commands
         printf("Ignored: %#x ",gemdos_opcode);
@@ -888,7 +900,7 @@ void gemdos_acsi_cmd(void) {
       gemdos_stub_call();
     } else if (op==OP_RESULT) {
       // Action result
-      acsi_wait_data(read_u16(acsi_command+2));
+      acsi_wait_data(result,read_u16(acsi_command+2));
     } else {
       gemdos_disk.sense = ERROR_INVARG;
       *acsireg = STATUS_ERROR;

@@ -16,6 +16,8 @@
 
 	opt	o+
 
+DMABUFSZ	equ	5	; DMA buffer size in sectors
+
 OP_GEMDOS	equ	1	; new GEMDOS call
 OP_ACTION	equ	2	; get next action to perform
 OP_RESULT	equ	3	; send result
@@ -196,7 +198,7 @@ action_loop:
 	lea	cdb(pc),a0
 	move.w	#$1100+OP_ACTION,(a0)	; SPACE(6) header + ACTION call code
 	move.l	#'zeST',2(a0)	; command tag
-	moveq	#1,d1		; sector count
+	moveq	#DMABUFSZ,d1	; sector count
 	moveq	#6,d2		; command size
 	moveq	#0,d3		; DMA direction: read
 	bsr	send_command
@@ -374,7 +376,7 @@ bootsec_install:
 	bsr	install_super
 
 	movem.l	(sp)+,d3-d7/a3-a6
-	move.l	#end_resident-begin+28+512,d0	; resident size
+	move.l	#end_resident-begin+28+512*DMABUFSZ,d0	; resident size
 	rts
 
 
@@ -392,7 +394,7 @@ gemdos_install:
 	bne.s	noinstall
 
 	clr	-(sp)
-	move.l	#end_resident-begin+256+512,-(sp)
+	move.l	#end_resident-begin+256+512*DMABUFSZ,-(sp)
 	move	#$31,-(sp)	; Ptermres
 	trap	#1
 
