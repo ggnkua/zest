@@ -558,8 +558,6 @@ static void Fsfirst(unsigned int pname, unsigned int attr) {
     return;
   }
 
-  printf("local path:%s pattern:%s\n",path_host,pattern);
-
   // fill DTA with the correct data
   struct _file_search *fs = malloc(sizeof(struct _file_search));
   if (!fs) {
@@ -707,6 +705,32 @@ static void Fwrite(int handle, unsigned int length, unsigned int addr) {
   no_action_required();
 }
 
+static void Fseek(int offset, int handle, int mode) {
+  printf("Fseek(%d,%d,%d)\n",offset,handle,mode);
+  if (handle<0x7a00) {
+    // not locally managed file
+    no_action_required();
+    return;
+  }
+  action_required();
+  int whence = -1;
+  if (mode==0) whence = SEEK_SET;
+  else if (mode==1) whence = SEEK_CUR;
+  else if (mode==2) whence = SEEK_END;
+  else {
+    gemdos_return(-36);   // EACCDN
+    return;
+  }
+  off_t off = lseek(handle-0x7a00,offset,whence);
+  if (off==-1) {
+    switch (errno) {
+      case EBADF: gemdos_return(-37); return; // EIHNDL
+      default:    gemdos_return(-65); return; // EINTRN
+    }
+  }
+  gemdos_return(off);
+}
+
 // Called by stub at initialisation
 static void drive_init(unsigned int begin_adr, unsigned int resblk_adr) {
   action_required();
@@ -761,8 +785,7 @@ static void *gemdos_thread(void *ptr) {
         gemdos_fallback();
         break;
       case 0x42:  // Fseek
-        printf("Fseek(%d,%d,%#x)\n",read_u32(buf+2),read_u16(buf+6),read_u16(buf+8));
-        no_action_required();
+        Fseek(read_i32(buf+2),read_u16(buf+6),read_u16(buf+8));
         break;
       case 0x43:  // Fattrib
         int wflag = read_u16(buf+6);
