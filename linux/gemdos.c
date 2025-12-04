@@ -43,6 +43,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <sys/stat.h>
+#include <sys/statvfs.h>
 #include <sys/types.h>
 #include <dirent.h>
 #include <time.h>
@@ -731,6 +732,29 @@ static void Fseek(int offset, int handle, int mode) {
   gemdos_return(off);
 }
 
+static void Dfree(unsigned int diskinfo_addr, unsigned int drive) {
+  unsigned char diskinfo[16];
+  printf("Dfree(%#x,%d)\n",diskinfo_addr,drive);
+  if ((drive==0&&current_drv!=gemdos_drv) || (drive>0&&drive-1!=gemdos_drv)) {
+    no_action_required();
+    return;
+  }
+  action_required();
+  struct statvfs buf;
+  if (statvfs(config.gemdos,&buf)) {
+    gemdos_return(-65); return; // EINTRN
+  }
+  // limit free size to a positive, signed 32 bit number
+  unsigned int max = 0x7fffffff/buf.f_bsize;
+  write_u32(diskinfo,buf.f_bfree<=max?buf.f_bfree:max);
+  write_u32(diskinfo+4,buf.f_blocks);
+  write_u32(diskinfo+8,512);
+  write_u32(diskinfo+12,buf.f_bsize/512);
+
+  gemdos_write_memory(diskinfo,diskinfo_addr,sizeof diskinfo);
+  gemdos_return(0);
+}
+
 // Called by stub at initialisation
 static void drive_init(unsigned int begin_adr, unsigned int resblk_adr) {
   action_required();
@@ -760,6 +784,9 @@ static void *gemdos_thread(void *ptr) {
         break;
       case 0x1a:  // Fsetdta
         Fsetdta(read_u32(buf+2));
+        break;
+      case 0x36:  // Dfree
+        Dfree(read_u32(buf+2),read_u16(buf+6));
         break;
       case 0x3b:  // Dsetpath
         Dsetpath(read_u32(buf+2));
@@ -888,6 +915,7 @@ void gemdos_acsi_cmd(void) {
       } else
       if (gemdos_opcode==0x0e   // Dsetdrv
         || gemdos_opcode==0x1a  // Fsetdta
+        || gemdos_opcode==0x36  // Dfree
         || gemdos_opcode==0x3b  // Dsetpath
         || gemdos_opcode==0x3c  // Fcreate
         || gemdos_opcode==0x3d  // Fopen
