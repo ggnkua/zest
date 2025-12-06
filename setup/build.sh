@@ -9,6 +9,9 @@ export EMUTOS_VERSION=1.4
 
 # Check dependencies
 MISSING=
+command -v awk > /dev/null || MISSING="$MISSING 9base"
+command -v xxd > /dev/null || MISSING="$MISSING xxd"
+command -v od > /dev/null || MISSING="$MISSING coreutils"
 command -v wget > /dev/null || MISSING="$MISSING wget"
 command -v git > /dev/null || MISSING="$MISSING git"
 command -v gcc > /dev/null || MISSING="$MISSING gcc"

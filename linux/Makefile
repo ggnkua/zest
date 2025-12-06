@@ -71,8 +71,8 @@ infomsg.o: infomsg.c infomsg.h osd.h setup.h font.h config.h
 
 gdboot.bin: gdboot.s
 	$(AS) -m68000 -Fbin -pic $< -o $@
-	truncate -s 512 $@
-	lua -e 'f=io.open("gdboot.bin","r+b") s=0 for a in f:lines(2) do u,l=a:byte(1,2) s=(s+u*256+l)%65536 end s=(70196-s)%65536 f:seek("end",-2) f:write(string.char(s/256,s%256))'
+	truncate -s 510 $@
+	od --endian=big -An -tu2 $@|awk '{for(i=1;i<=NF;i++) sum+=$$i} END {printf "%04X",(70196-sum%65536)%65536}'|xxd -r -p>>$@
 
 gdboot.img: gdboot.bin gdstub.prg
 	cat $^ > $@
