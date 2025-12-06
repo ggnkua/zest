@@ -748,7 +748,33 @@ static void Fread(int handle, unsigned int length, unsigned int addr) {
 
 static void Fwrite(int handle, unsigned int length, unsigned int addr) {
   printf("Fwrite(%d,%d,%#x)\n",handle,length,addr);
-  no_action_required();
+  if (handle<0x7a00) {
+    // not locally managed file
+    no_action_required();
+    return;
+  }
+  action_required();
+
+  unsigned char buf[512*DMABUFSZ];
+  int nwritten = 0;
+
+  while (length>0) {
+    unsigned int n = length<sizeof buf?length:sizeof buf;
+    gemdos_read_memory(buf,addr,n);
+    int wrb = write(handle-0x7a00,buf,n);
+    if (wrb==-1) {
+      if (errno==EBADF) {
+        gemdos_return(-37);   // EIHNDL
+        return;
+      }
+      gemdos_return(-65);   // EINTRN
+      return;
+    }
+    nwritten += wrb;
+    addr += wrb;
+    length -= wrb;
+  }
+  gemdos_return(nwritten);
 }
 
 static void Fseek(int offset, int handle, int mode) {

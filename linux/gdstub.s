@@ -284,7 +284,7 @@ send_result:
 	move.w	#$1100+OP_RESULT,(a0)	; SPACE(6) header + RESULT call code
 	move.w	a1,2(a0)	; number of data bytes
 	move.w	#'zS',4(a0)	; command tag
-	moveq	#1,d1		; sector count
+	moveq	#DMABUFSZ,d1	; number of sectors
 	moveq	#6,d2		; command size
 	moveq	#1,d3		; DMA direction: write
 	bsr	send_command
