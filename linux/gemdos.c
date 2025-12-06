@@ -166,6 +166,29 @@ static pthread_mutex_t mut = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t cond = PTHREAD_COND_INITIALIZER;
 static pthread_t thread;
 
+// convert errno value to GEMDOS error code
+static int gemdos_error_code(void) {
+  switch (errno) {
+    case ENOENT:
+      return -33;   // EFILNF
+    case ENOTDIR:
+      return -34;   // EPTHNF
+    case EBUSY:
+    case EEXIST:
+    case EIO:
+    case EINVAL:
+    case EISDIR:
+    case EPERM:
+    case EACCES:
+    case EROFS:
+      return -36;   // EACCDN
+    case EBADF:
+      return -37;   // EIHNDL
+    default:
+      return -65;   // EINTRN
+  }
+}
+
 static int gemdos_cond_wait(int timeout_ms) {
   struct timespec ts;
   clock_gettime(CLOCK_REALTIME_COARSE,&ts);
@@ -692,11 +715,7 @@ static void Fclose(int handle) {
     gemdos_return(0);
     return;
   }
-  if (errno==EBADF) {
-    gemdos_return(-37);   // EIHNDL
-    return;
-  }
-  gemdos_return(-65);   // EINTRN
+  gemdos_return(gemdos_error_code());
 }
 
 static void Fread(int handle, unsigned int length, unsigned int addr) {
@@ -721,11 +740,7 @@ static void Fread(int handle, unsigned int length, unsigned int addr) {
       break;
     }
     if (rdb==-1) {
-      if (errno==EBADF) {
-        gemdos_return(-37);   // EIHNDL
-        return;
-      }
-      gemdos_return(-65);   // EINTRN
+      gemdos_return(gemdos_error_code());
       return;
     }
     // wait for stub to perform an OP_ACTION command
@@ -763,11 +778,7 @@ static void Fwrite(int handle, unsigned int length, unsigned int addr) {
     gemdos_read_memory(buf,addr,n);
     int wrb = write(handle-0x7a00,buf,n);
     if (wrb==-1) {
-      if (errno==EBADF) {
-        gemdos_return(-37);   // EIHNDL
-        return;
-      }
-      gemdos_return(-65);   // EINTRN
+      gemdos_return(gemdos_error_code());
       return;
     }
     nwritten += wrb;
@@ -795,10 +806,8 @@ static void Fseek(int offset, int handle, int mode) {
   }
   off_t off = lseek(handle-0x7a00,offset,whence);
   if (off==-1) {
-    switch (errno) {
-      case EBADF: gemdos_return(-37); return; // EIHNDL
-      default:    gemdos_return(-65); return; // EINTRN
-    }
+    gemdos_return(gemdos_error_code());
+    return;
   }
   gemdos_return(off);
 }
