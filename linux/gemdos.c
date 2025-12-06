@@ -707,13 +707,15 @@ static void Fread(int handle, unsigned int length, unsigned int addr) {
     return;
   }
   action_required();
+  uint8_t buf[512*DMABUFSZ*2];
+  int buf_id = 0;
   const int blksz = 512*DMABUFSZ-8;
   int nread = 0;
 
   while (length>0) {
+    uint8_t *pbuf = buf+512*DMABUFSZ*buf_id;
     unsigned int n = length<blksz?length:blksz;
-
-    int rdb = read(handle-0x7a00,action+8,n);
+    int rdb = read(handle-0x7a00,pbuf+8,n);
     if (rdb==0) {
       // end of file
       break;
@@ -732,13 +734,14 @@ static void Fread(int handle, unsigned int length, unsigned int addr) {
       printf("error Fread\n");
       return;
     }
-    write_u16(action,ACTION_WRMEM);
-    write_u32(action+2,addr);
-    write_u16(action+6,rdb);
-    acsi_send_reply(action,(8+rdb+15)&-16);
+    write_u16(pbuf,ACTION_WRMEM);
+    write_u32(pbuf+2,addr);
+    write_u16(pbuf+6,rdb);
+    acsi_send_reply(pbuf,(8+rdb+15)&-16);
     nread += rdb;
     addr += rdb;
     length -= rdb;
+    buf_id = 1-buf_id;
   }
   gemdos_return(nread);
 }
