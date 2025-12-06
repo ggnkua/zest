@@ -788,6 +788,37 @@ static void Fwrite(int handle, unsigned int length, unsigned int addr) {
   gemdos_return(nwritten);
 }
 
+static void Fdelete(unsigned int pname) {
+  char path_gemdos[1024];
+  char path_host[1024];
+  action_required();
+  strncpy(path_gemdos,gemdos_read_string(pname),sizeof path_gemdos);
+  printf("Fdelete(\"%s\")\n",path_gemdos);
+
+  int retval = path_lookup(path_host,path_gemdos);
+  if (retval==-2) {
+    // not on managed drive
+    gemdos_fallback();
+    return;
+  }
+  if (retval==-1||retval==2) {
+    // invalid path or file not existing
+    gemdos_return(-34);   // EPTHNF
+    return;
+  }
+  if (retval==0) {
+    // directory found in place of the file
+    gemdos_return(-36);   // EACCDN
+    return;
+  }
+  retval = unlink(path_host);
+  if (retval==-1) {
+    gemdos_return(gemdos_error_code());
+    return;
+  }
+  gemdos_return(0);
+}
+
 static void Fseek(int offset, int handle, int mode) {
   printf("Fseek(%d,%d,%d)\n",offset,handle,mode);
   if (handle<0x7a00) {
@@ -887,9 +918,7 @@ static void *gemdos_thread(void *ptr) {
         Fwrite(read_u16(buf+2),read_u32(buf+4),read_u32(buf+8));
         break;
       case 0x41:  // Fdelete
-        action_required();
-        printf("Fdelete(\"%s\")\n",gemdos_read_string(read_u32(buf+2)));
-        gemdos_fallback();
+        Fdelete(read_u32(buf+2));
         break;
       case 0x42:  // Fseek
         Fseek(read_i32(buf+2),read_u16(buf+6),read_u16(buf+8));
