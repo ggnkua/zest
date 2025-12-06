@@ -382,8 +382,14 @@ static int path_lookup(char *search_path, char *src) {
         return -1;
       }
       len += strlen(realname);
-    } else {
+    } else if (next) {
       return -1;
+    } else {
+      // file not found: create a new file name
+      search_path[len++] = '/';
+      char *d = search_path+len;
+      const char *s = src;
+      while ((*d++=tolower(*s++)));
     }
     dirname = next;
   }
