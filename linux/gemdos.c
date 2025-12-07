@@ -411,7 +411,7 @@ static int path_lookup(char *search_path, char *src) {
       // file not found: create a new file name
       search_path[len++] = '/';
       char *d = search_path+len;
-      const char *s = src;
+      const char *s = dirname;
       while ((*d++=tolower(*s++)));
     }
     dirname = next;
@@ -866,6 +866,71 @@ static void Dfree(unsigned int diskinfo_addr, unsigned int drive) {
   gemdos_return(0);
 }
 
+static void Dcreate(unsigned int pname) {
+  char path_gemdos[1024];
+  char path_host[1024];
+  action_required();
+  strncpy(path_gemdos,gemdos_read_string(pname),sizeof path_gemdos);
+  printf("Dcreate(\"%s\")\n",path_gemdos);
+  int retval = path_lookup(path_host,path_gemdos);
+  if (retval==-2) {
+    // not on managed drive
+    gemdos_fallback();
+    return;
+  }
+  if (retval==-1) {
+    // invalid path
+    gemdos_return(-34);   // EPTHNF
+    return;
+  }
+  if (retval==0||retval==1) {
+    // directory or file found in place of the file
+    gemdos_return(-36);   // EACCDN
+    return;
+  }
+  retval = mkdir(path_host,0777);
+  if (retval==-1) {
+    gemdos_return(gemdos_error_code());
+    return;
+  }
+  gemdos_return(0);
+}
+
+static void Ddelete(unsigned int pname) {
+  char path_gemdos[1024];
+  char path_host[1024];
+  action_required();
+  strncpy(path_gemdos,gemdos_read_string(pname),sizeof path_gemdos);
+  printf("Ddelete(\"%s\")\n",path_gemdos);
+  int retval = path_lookup(path_host,path_gemdos);
+  if (retval==-2) {
+    // not on managed drive
+    gemdos_fallback();
+    return;
+  }
+  if (retval==-1) {
+    // invalid path
+    gemdos_return(-34);   // EPTHNF
+    return;
+  }
+  if (retval==1) {
+    // regular file found
+    gemdos_return(-36);   // EACCDN
+    return;
+  }
+  if (retval==2) {
+    // file not existing
+    gemdos_return(-34);   // EPTHNF
+    return;
+  }
+  retval = rmdir(path_host);
+  if (retval==-1) {
+    gemdos_return(gemdos_error_code());
+    return;
+  }
+  gemdos_return(0);
+}
+
 // Called by stub at initialisation
 static void drive_init(unsigned int begin_adr, unsigned int resblk_adr) {
   action_required();
@@ -898,6 +963,12 @@ static void *gemdos_thread(void *ptr) {
         break;
       case 0x36:  // Dfree
         Dfree(read_u32(buf+2),read_u16(buf+6));
+        break;
+      case 0x39:  // Dcreate
+        Dcreate(read_u32(buf+2));
+        break;
+      case 0x3a:  // Ddelete
+        Ddelete(read_u32(buf+2));
         break;
       case 0x3b:  // Dsetpath
         Dsetpath(read_u32(buf+2));
@@ -1025,6 +1096,8 @@ void gemdos_acsi_cmd(void) {
       if (gemdos_opcode==0x0e   // Dsetdrv
         || gemdos_opcode==0x1a  // Fsetdta
         || gemdos_opcode==0x36  // Dfree
+        || gemdos_opcode==0x39  // Dcreate
+        || gemdos_opcode==0x3a  // Ddelete
         || gemdos_opcode==0x3b  // Dsetpath
         || gemdos_opcode==0x3c  // Fcreate
         || gemdos_opcode==0x3d  // Fopen
