@@ -207,17 +207,25 @@ action_loop:
 	lea	resblk(pc),a0
 	move.l	a0,a1
 	move	(a0)+,d0	; Action code
+	add	d0,d0
+	move	jtbl(pc,d0.w),d0
+	jmp	jtbl(pc,d0.w)
 
-	cmp	#ACTION_FALLBACK,d0
-	beq	endcmd
+jtbl:	dc.w	action_fallback-jtbl
+	dc.w	action_return-jtbl
+	dc.w	action_rdmem-jtbl
+	dc.w	action_wrmem-jtbl
+	dc.w	action_wrmem0-jtbl
 
-actst1:	cmp	#ACTION_RETURN,d0
-	bne.s	actst2
+action_fallback:
+	moveq	#0,d0
+	bra	endcmd
+
+action_return:
 	move.l	(a0),d1		; return value
 	bra	endcmd
 
-actst2:	cmp	#ACTION_RDMEM,d0
-	bne.s	actst3
+action_rdmem:
 ; Read from memory
 	move.l	(a0)+,a2	; address to read from
 	move	(a0),d0		; how many bytes (0 if string)
@@ -256,17 +264,11 @@ read_string:
 	bne.s	read_string
 	bra.s	send_result
 
-actst3:
-	cmp	#ACTION_WRMEM,d0
-	bne	actst4
-
+action_wrmem:
 	bsr	write_mem
 	bra	action_loop
 
-actst4:
-	cmp	#ACTION_WRMEM0,d0
-	bne	endcmd
-
+action_wrmem0:
 	bsr	write_mem
 	moveq	#0,d1
 	bra	endcmd
