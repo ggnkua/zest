@@ -39,6 +39,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <strings.h>
+#include <stdarg.h>
 #include <ctype.h>
 #include <fcntl.h>
 #include <unistd.h>
@@ -80,6 +81,7 @@
 #define ACTION_RDMEM    2               /* Read from memory */
 #define ACTION_WRMEM    3               /* Write to memory */
 #define ACTION_WRMEM0   4               /* Write to memory then return 0 */
+#define ACTION_GEMDOS   5               /* GEMDOS call */
 
 /* GEMDOS file attribute flags */
 #define FA_READONLY 0x01                /* Include files which are read-only */
@@ -89,6 +91,7 @@
 #define FA_DIR      0x10                /* Include subdirectories */
 #define FA_ARCHIVE  0x20                /* Include files with archive bit set */
 
+static unsigned int presblk;            /* Address of resblk buffer in ST memory */
 static uint8_t action[512*DMABUFSZ];    /* Action buffer */
 static uint8_t *result;                 /* Pointer to returned result data */
 
@@ -276,6 +279,41 @@ static const char *gemdos_read_string(unsigned int addr) {
 static unsigned int gemdos_read_long(unsigned int addr) {
   gemdos_read_memory(NULL,addr,4);
   return read_u32((uint8_t*)iobuf);
+}
+
+static unsigned int gemdos_printstr(const char *str) {
+  // wait for stub to perform an OP_ACTION command
+  int ret = gemdos_cond_wait(500);
+  if (ret!=0) {
+    printf("error gemdos_printstr\n");
+    return -1;
+  }
+  int len = strlen(str);
+  write_u16(action,ACTION_GEMDOS);
+  write_u16(action+2,6);
+  write_u16(action+4,9);
+  write_u32(action+6,presblk+10);
+  memcpy(action+10,str,len);
+  memcpy(action+10+len,"\r\n",3);
+  acsi_send_reply(action,10+len+3);
+
+  // wait for OP_RESULT command and sectors from DMA
+  ret = gemdos_cond_wait(500);
+  if (ret!=0) {
+    printf("error gemdos_printstr 2\n");
+    return -1;
+  }
+  *acsireg = STATUS_OK;
+  return read_i32((uint8_t*)iobuf);
+}
+
+static void gemdos_printf(const char *fmt,...) {
+  char buf[256];
+  va_list ap;
+  va_start(ap,fmt);
+  vsnprintf(buf,sizeof(buf),fmt,ap);
+  va_end(ap);
+  gemdos_printstr(buf);
 }
 
 // finish action loop with fall back to GEMDOS
@@ -977,12 +1015,14 @@ static void Frename(unsigned int poldname,unsigned int pnewname) {
 
 // Called by stub at initialisation
 static void drive_init(unsigned int begin_adr, unsigned int resblk_adr) {
+  presblk = resblk_adr;
   action_required();
   unsigned int drvbits = gemdos_read_long(0x4c2);
   printf("Driver init, begin:%#x, resblk:%#x, size:%u, drvbits:%u\n",begin_adr,resblk_adr,resblk_adr-begin_adr+28+512*BUFSIZ,drvbits);
   gemdos_drv = 2;
   while (drvbits&(1<<gemdos_drv)) ++gemdos_drv;
   gemdos_write_long(0x4c2,drvbits|(1<<gemdos_drv));
+  gemdos_printf("GEMDOS drive installed as drive %c:",'A'+gemdos_drv);
   gemdos_fallback();
 }
 
@@ -1050,11 +1090,7 @@ static void *gemdos_thread(void *ptr) {
         no_action_required();
         break;
       case 0x4b:  // Pexec
-        int mode = read_u16(buf+2);
-        unsigned int name = read_u32(buf+4);
-        unsigned int cmdline = read_u32(buf+8);
-        unsigned int env = read_u32(buf+12);
-        Pexec(mode,name,cmdline,env);
+        Pexec(read_u16(buf+2),read_u32(buf+4),read_u32(buf+8),read_u32(buf+12));
         break;
       case 0x4e:  // Fsfirst
         Fsfirst(read_u32(buf+2),read_u16(buf+6));

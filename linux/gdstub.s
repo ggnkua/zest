@@ -22,12 +22,6 @@ OP_GEMDOS	equ	1	; new GEMDOS call
 OP_ACTION	equ	2	; get next action to perform
 OP_RESULT	equ	3	; send result
 
-ACTION_FALLBACK	equ	0	; Fallback to TOS code
-ACTION_RETURN	equ	1	; Return from GEMDOS
-ACTION_RDMEM	equ	2	; Read from memory
-ACTION_WRMEM	equ	3	; Write to memory
-ACTION_WRMEM0	equ	4	; Write to memory then return 0
-
 	section	text
 
 begin:
@@ -211,19 +205,38 @@ action_loop:
 	move	jtbl(pc,d0.w),d0
 	jmp	jtbl(pc,d0.w)
 
-jtbl:	dc.w	action_fallback-jtbl
-	dc.w	action_return-jtbl
-	dc.w	action_rdmem-jtbl
-	dc.w	action_wrmem-jtbl
-	dc.w	action_wrmem0-jtbl
+jtbl:	dc.w	action_fallback-jtbl	; Fallback to TOS code
+	dc.w	action_return-jtbl	; Return from GEMDOS
+	dc.w	action_rdmem-jtbl	; Read from memory
+	dc.w	action_wrmem-jtbl	; Write to memory
+	dc.w	action_wrmem0-jtbl	; Write to memory then return 0
+	dc.w	action_gemdos-jtbl	; GEMDOS call
 
-action_fallback:
-	moveq	#0,d0
-	bra	endcmd
-
-action_return:
-	move.l	(a0),d1		; return value
-	bra	endcmd
+action_gemdos:
+; Call GEMDOS
+	move.l	sp,cdb
+	move	(a0)+,d0	; size of data to put on stack
+	suba.w	d0,sp		; allocate required stack space
+	move.l	sp,a1
+	lsr	#2,d0		; number of longs
+	bcc.s	gdccl0		; odd number of words?
+	move.w	(a0)+,(a1)+	; copy single word
+gdccl0:	subq.w	#1,d0		; number of longs-1
+	bcs.s	gdccl2
+gdccl1:	move.l	(a0)+,(a1)+
+	dbra	d0,gdccl1
+gdccl2:
+	tst	$59e.w		; _longframe
+	beq.s	gdcnlf
+	clr	-(sp)		; two additional bytes on 030+
+gdcnlf:	pea	gdcret(pc)	; return address
+	move	sr,-(sp)
+	move.l	gemdos-4(pc),a0
+	jmp	(a0)
+gdcret:	move.l	cdb(pc),sp	; restore stack pointer
+	lea	resblk(pc),a1
+	move.l	d0,(a1)+
+	bra	send_result
 
 action_rdmem:
 ; Read from memory
@@ -271,6 +284,14 @@ action_wrmem:
 action_wrmem0:
 	bsr	write_mem
 	moveq	#0,d1
+	bra	endcmd
+
+action_fallback:
+	moveq	#0,d0
+	bra	endcmd
+
+action_return:
+	move.l	(a0),d1		; return value
 	bra	endcmd
 
 endcmd:
