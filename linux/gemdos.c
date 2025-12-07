@@ -931,6 +931,50 @@ static void Ddelete(unsigned int pname) {
   gemdos_return(0);
 }
 
+static void Frename(unsigned int poldname,unsigned int pnewname) {
+  char oldname_gemdos[1024];
+  char newname_gemdos[1024];
+  char oldname_host[1024];
+  char newname_host[1024];
+  action_required();
+  strncpy(oldname_gemdos,gemdos_read_string(poldname),512);
+  strncpy(newname_gemdos,gemdos_read_string(pnewname),512);
+  printf("Frename(\"%s\",\"%s\")\n",oldname_gemdos,newname_gemdos);
+  int retval = path_lookup(oldname_host,oldname_gemdos);
+  if (retval==-2) {
+    // not on managed drive
+    gemdos_fallback();
+    return;
+  }
+  if (retval==-1 || retval==2) {
+    // invalid path or file not existing
+    gemdos_return(-34);   // EPTHNF
+    return;
+  }
+  retval = path_lookup(newname_host,newname_gemdos);
+  if (retval==-2) {
+    // not on managed drive
+    gemdos_return(-48);   // ENSAME
+    return;
+  }
+  if (retval==-1) {
+    // invalid path
+    gemdos_return(-34);   // EPTHNF
+    return;
+  }
+  if (retval==0 || retval==1) {
+    // directory or file already existing
+    gemdos_return(-36);   // EACCDN
+    return;
+  }
+  retval = rename(oldname_host,newname_host);
+  if (retval==-1) {
+    gemdos_return(gemdos_error_code());
+    return;
+  }
+  gemdos_return(0);
+}
+
 // Called by stub at initialisation
 static void drive_init(unsigned int begin_adr, unsigned int resblk_adr) {
   action_required();
@@ -1019,15 +1063,7 @@ static void *gemdos_thread(void *ptr) {
         Fsnext();
         break;
       case 0x56:  // Frename
-        char oldname[256];
-        char newname[256];
-        unsigned int poldname = read_u32(buf+4);
-        unsigned int pnewname = read_u32(buf+8);
-        action_required();
-        strncpy(oldname,gemdos_read_string(poldname),256);
-        strncpy(newname,gemdos_read_string(pnewname),256);
-        printf("Frename(\"%s\",\"%s\")\n",oldname,newname);
-        gemdos_fallback();
+        Frename(read_u32(buf+4),read_u32(buf+8));
         break;
       case 0xffff:  // driver initialisation
         drive_init(read_u32(buf),read_u32(buf+4));
