@@ -131,8 +131,8 @@ int hdmi_set_mode(int pxclock, int vfreq, int pixperline, int nlines) {
     pixperline, pixperline>>8,
     // 6: Total lines
     nlines, nlines>>8,
-    // 8: InputBusFmt, 1x1 pixel repetition, rising edge of clock
-    0x70,
+    // 8: InputBusFmt, 1x1 pixel repetition, falling edge of clock
+    0x60,
     // 9: 8-bit color depth, RGB
     0x00,
     // 10: Output format, RGB
