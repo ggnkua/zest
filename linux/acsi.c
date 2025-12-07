@@ -57,6 +57,17 @@ static void clear_sense_data(int acsi_id) {
   acsi_disk[acsi_id].report_lba = 0;
 }
 
+static void update_gemdos_id(void) {
+  int i;
+  gemdos_id = -1;
+  for (i=0;i<8;++i) {
+    if (acsi_disk[i].fd == -1) {
+      gemdos_id = i;
+      break;
+    }
+  }
+}
+
 static void openimg(int acsi_id, const char *filename) {
   if (filename) {
     acsi_disk[acsi_id].fd = open(filename,O_RDWR);
@@ -67,6 +78,7 @@ static void openimg(int acsi_id, const char *filename) {
     off_t size = lseek(acsi_disk[acsi_id].fd,0,SEEK_END);
     acsi_disk[acsi_id].sectors = size/512;
     lseek(acsi_disk[acsi_id].fd,0,SEEK_SET);
+    update_gemdos_id();
   }
 }
 
@@ -75,6 +87,7 @@ static void closeimg(int acsi_id) {
     close(acsi_disk[acsi_id].fd);
   }
   acsi_disk[acsi_id].fd = -1;
+  update_gemdos_id();
 }
 
 void hdd_changeimg(int acsi_id, const char *full_pathname) {
@@ -91,12 +104,7 @@ void acsi_init(volatile uint32_t *parmreg) {
     openimg(i,config.acsi[i]);
     clear_sense_data(i);
   }
-  for (i=0;i<8;++i) {
-    if (acsi_disk[i].fd == -1) {
-      gemdos_id = i;
-      break;
-    }
-  }
+  update_gemdos_id();
   gemdos_init();
 }
 
@@ -295,7 +303,7 @@ void acsi_interrupt(void) {
       // command byte
       dev_id = d>>5;
       // ignore command if no image is set up for the device ID
-      if (acsi_disk[dev_id].fd==-1 && dev_id!=gemdos_id) return;
+      if (acsi_disk[dev_id].fd==-1 && (dev_id!=gemdos_id || config.gemdos==NULL)) return;
       cmd = d&0x1f;
       if (cmd==0x1f) {
         // ICD command extension
