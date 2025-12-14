@@ -443,14 +443,33 @@ static int path_lookup(char *search_path, char *src) {
 
 // Dsetpath
 static void Dsetpath(unsigned int ppath) {
-  char path[1024];
+  char path_host[1024];
+  char path_gemdos[1024];
   action_required();
-  strncpy(path,gemdos_read_string(ppath),sizeof path);
-  printf("Dsetpath(\"%s\")\n",path);
-  if (current_drv==gemdos_drv) {
-    path_lookup(current_path,path);
+  strncpy(path_gemdos,gemdos_read_string(ppath),sizeof path_gemdos);
+  printf("Dsetpath(\"%s\")\n",path_gemdos);
+  if (current_drv!=gemdos_drv) {
+    gemdos_fallback();
+    return;
   }
-  gemdos_fallback();
+  int retval = path_lookup(path_host,path_gemdos);
+  if (retval==-2) {
+    // not on managed drive
+    gemdos_fallback();
+    return;
+  }
+  if (retval==-1) {
+    // invalid path
+    gemdos_return(-34);   // EPTHNF
+    return;
+  }
+  if (retval==1 || retval==2) {
+    // directory found or missing file
+    gemdos_return(-33);   // EFILNF
+    return;
+  }
+  strncpy(current_path,path_host,sizeof current_path);
+  gemdos_return(0);   // EFILNF
 }
 
 struct _file_search {
