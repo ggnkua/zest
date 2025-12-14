@@ -92,6 +92,14 @@
 #define FA_DIR      0x10                /* Include subdirectories */
 #define FA_ARCHIVE  0x20                /* Include files with archive bit set */
 
+/* debugging messages */
+//#define DEBUG
+#ifdef DEBUG
+# define DPRINTF(fmt,...) printf(fmt,##__VA_ARGS__)
+#else
+# define DPRINTF(fmt,...) // do nothing
+#endif
+
 static unsigned int presblk;            /* Address of resblk buffer in ST memory */
 static uint8_t action[512*DMABUFSZ];    /* Action buffer */
 static uint8_t *result;                 /* Pointer to returned result data */
@@ -240,8 +248,6 @@ static void gemdos_read_memory(unsigned char *buf, unsigned int addr, unsigned i
 // write bytes to address (stub must be in action mode) (generic function)
 // ret0: if nonzero, terminate the action loop, having GEMDOS return 0
 static void gemdos_write_memory_generic(const void *buf, unsigned int addr, unsigned int nbytes, int ret0) {
-  //printf("gemdos_write_memory %#x\n",addr);
-
   // wait for stub to perform an OP_ACTION command
   int ret = gemdos_cond_wait(500);
   if (ret!=0) {
@@ -447,7 +453,7 @@ static void Dsetpath(unsigned int ppath) {
   char path_gemdos[1024];
   action_required();
   strncpy(path_gemdos,gemdos_read_string(ppath),sizeof path_gemdos);
-  printf("Dsetpath(\"%s\")\n",path_gemdos);
+  DPRINTF("Dsetpath(\"%s\")\n",path_gemdos);
   if (current_drv!=gemdos_drv) {
     gemdos_fallback();
     return;
@@ -498,7 +504,7 @@ static void Pexec(int mode, unsigned int pname, unsigned int pcmdline, int penv)
     case 3:
       strncpy(path_gemdos,gemdos_read_string(pname),1024);
       strncpy(cmdline,gemdos_read_string(pcmdline),1024);
-      printf("Pexec(%d,\"%s\",\"%s\",%s)\n",mode,path_gemdos,cmdline,printedenv);
+      DPRINTF("Pexec(%d,\"%s\",\"%s\",%s)\n",mode,path_gemdos,cmdline,printedenv);
       int retval = path_lookup(path_host,path_gemdos);
       if (retval==-2) {
         // not on managed drive
@@ -628,11 +634,11 @@ static void Pexec(int mode, unsigned int pname, unsigned int pcmdline, int penv)
       break;
     case 5:
       strncpy(cmdline,gemdos_read_string(pcmdline),1024);
-      printf("Pexec(%d,%#x,\"%s\",%s)\n",mode,pname,cmdline,printedenv);
+      DPRINTF("Pexec(%d,%#x,\"%s\",%s)\n",mode,pname,cmdline,printedenv);
       gemdos_fallback();
       break;
     default:
-      printf("Pexec(%d,%#x,%#x,%s)\n",mode,pname,pcmdline,printedenv);
+      DPRINTF("Pexec(%d,%#x,%#x,%s)\n",mode,pname,pcmdline,printedenv);
       gemdos_fallback();
   }
 }
@@ -754,7 +760,7 @@ static void Fsfirst(unsigned int pname, unsigned int attr) {
   char path_host[1024];
   action_required();
   strncpy(path_gemdos,gemdos_read_string(pname),sizeof path_gemdos);
-  printf("Fsfirst(\"%s\",%d)\n",path_gemdos,attr);
+  DPRINTF("Fsfirst(\"%s\",%d)\n",path_gemdos,attr);
 
   // separate pattern from path
   char *pattern = strrchr(path_gemdos,'\\');
@@ -798,7 +804,7 @@ static void Fsfirst(unsigned int pname, unsigned int attr) {
 }
 
 static void Fsnext(void) {
-  printf("Fsnext()\n");
+  DPRINTF("Fsnext()\n");
   action_required();
   next_file();
 }
@@ -824,7 +830,7 @@ static void Fopen(unsigned int pname, unsigned int mode) {
   static const int opmode[] = { O_RDONLY, O_WRONLY, O_RDWR };
   action_required();
   strncpy(path_gemdos,gemdos_read_string(pname),sizeof path_gemdos);
-  printf("Fopen(\"%s\",%d)\n",path_gemdos,mode);
+  DPRINTF("Fopen(\"%s\",%d)\n",path_gemdos,mode);
 
   int retval = path_lookup(path_host,path_gemdos);
   if (retval==-2) {
@@ -862,7 +868,7 @@ static void Fcreate(unsigned int pname, unsigned int attr) {
   char path_host[1024];
   action_required();
   strncpy(path_gemdos,gemdos_read_string(pname),sizeof path_gemdos);
-  printf("Fcreate(\"%s\",%#x)\n",path_gemdos,attr);
+  DPRINTF("Fcreate(\"%s\",%#x)\n",path_gemdos,attr);
 
   int retval = path_lookup(path_host,path_gemdos);
   if (retval==-2) {
@@ -891,7 +897,7 @@ static void Fcreate(unsigned int pname, unsigned int attr) {
 }
 
 static void Fclose(int handle) {
-  printf("Fclose(%d)\n",handle);
+  DPRINTF("Fclose(%d)\n",handle);
   if (handle<0x7a00) {
     // not locally managed file
     no_action_required();
@@ -907,7 +913,7 @@ static void Fclose(int handle) {
 }
 
 static void Fread(int handle, unsigned int length, unsigned int addr) {
-  printf("Fread(%d,%d,%#x)\n",handle,length,addr);
+  DPRINTF("Fread(%d,%d,%#x)\n",handle,length,addr);
   if (handle<0x7a00) {
     // not locally managed file
     no_action_required();
@@ -950,7 +956,7 @@ static void Fread(int handle, unsigned int length, unsigned int addr) {
 }
 
 static void Fwrite(int handle, unsigned int length, unsigned int addr) {
-  printf("Fwrite(%d,%d,%#x)\n",handle,length,addr);
+  DPRINTF("Fwrite(%d,%d,%#x)\n",handle,length,addr);
   if (handle<0x7a00) {
     // not locally managed file
     no_action_required();
@@ -981,7 +987,7 @@ static void Fdelete(unsigned int pname) {
   char path_host[1024];
   action_required();
   strncpy(path_gemdos,gemdos_read_string(pname),sizeof path_gemdos);
-  printf("Fdelete(\"%s\")\n",path_gemdos);
+  DPRINTF("Fdelete(\"%s\")\n",path_gemdos);
 
   int retval = path_lookup(path_host,path_gemdos);
   if (retval==-2) {
@@ -1008,7 +1014,7 @@ static void Fdelete(unsigned int pname) {
 }
 
 static void Fseek(int offset, int handle, int mode) {
-  printf("Fseek(%d,%d,%d)\n",offset,handle,mode);
+  DPRINTF("Fseek(%d,%d,%d)\n",offset,handle,mode);
   if (handle<0x7a00) {
     // not locally managed file
     no_action_required();
@@ -1033,7 +1039,7 @@ static void Fseek(int offset, int handle, int mode) {
 
 static void Dfree(unsigned int diskinfo_addr, unsigned int drive) {
   unsigned char diskinfo[16];
-  printf("Dfree(%#x,%d)\n",diskinfo_addr,drive);
+  DPRINTF("Dfree(%#x,%d)\n",diskinfo_addr,drive);
   if ((drive==0&&current_drv!=gemdos_drv) || (drive>0&&drive-1!=gemdos_drv)) {
     no_action_required();
     return;
@@ -1059,7 +1065,7 @@ static void Dcreate(unsigned int pname) {
   char path_host[1024];
   action_required();
   strncpy(path_gemdos,gemdos_read_string(pname),sizeof path_gemdos);
-  printf("Dcreate(\"%s\")\n",path_gemdos);
+  DPRINTF("Dcreate(\"%s\")\n",path_gemdos);
   int retval = path_lookup(path_host,path_gemdos);
   if (retval==-2) {
     // not on managed drive
@@ -1089,7 +1095,7 @@ static void Ddelete(unsigned int pname) {
   char path_host[1024];
   action_required();
   strncpy(path_gemdos,gemdos_read_string(pname),sizeof path_gemdos);
-  printf("Ddelete(\"%s\")\n",path_gemdos);
+  DPRINTF("Ddelete(\"%s\")\n",path_gemdos);
   int retval = path_lookup(path_host,path_gemdos);
   if (retval==-2) {
     // not on managed drive
@@ -1127,7 +1133,7 @@ static void Frename(unsigned int poldname,unsigned int pnewname) {
   action_required();
   strncpy(oldname_gemdos,gemdos_read_string(poldname),512);
   strncpy(newname_gemdos,gemdos_read_string(pnewname),512);
-  printf("Frename(\"%s\",\"%s\")\n",oldname_gemdos,newname_gemdos);
+  DPRINTF("Frename(\"%s\",\"%s\")\n",oldname_gemdos,newname_gemdos);
   int retval = path_lookup(oldname_host,oldname_gemdos);
   if (retval==-2) {
     // not on managed drive
@@ -1168,7 +1174,7 @@ static void drive_init(unsigned int begin_adr, unsigned int resblk_adr) {
   presblk = resblk_adr;
   action_required();
   unsigned int drvbits = gemdos_read_long(0x4c2);
-  printf("Driver init, begin:%#x, resblk:%#x, size:%u, drvbits:%u\n",begin_adr,resblk_adr,resblk_adr-begin_adr+28+512*BUFSIZ,drvbits);
+  DPRINTF("Driver init, begin:%#x, resblk:%#x, size:%u, drvbits:%u\n",begin_adr,resblk_adr,resblk_adr-begin_adr+28+512*BUFSIZ,drvbits);
   gemdos_drv = 2;
   while (drvbits&(1<<gemdos_drv)) ++gemdos_drv;
   gemdos_write_long(0x4c2,drvbits|(1<<gemdos_drv));
@@ -1185,11 +1191,11 @@ static void *gemdos_thread(void *ptr) {
       switch (gemdos_opcode) {
       case 0x0e:  // Dsetdrv
         current_drv = read_u16(buf+2);
-        printf("Dsetdrv(%d)\n",current_drv);
+        DPRINTF("Dsetdrv(%d)\n",current_drv);
         no_action_required();
         break;
       case 0x19:  // Dgetdrv
-        printf("Dgetdrv()\n");
+        DPRINTF("Dgetdrv()\n");
         no_action_required();
         break;
       case 0x1a:  // Fsetdta
@@ -1232,11 +1238,11 @@ static void *gemdos_thread(void *ptr) {
         int wflag = read_u16(buf+6);
         int attrib = read_u16(buf+8);
         action_required();
-        printf("Fattrib(\"%s\".%d,%d)\n",gemdos_read_string(read_u32(buf+2)),wflag,attrib);
+        DPRINTF("Fattrib(\"%s\".%d,%d)\n",gemdos_read_string(read_u32(buf+2)),wflag,attrib);
         gemdos_fallback();
         break;
       case 0x57:  // Fdatime
-        printf("Fdatime(%#x,%d,%d)\n",read_u32(buf+2),read_u16(buf+6),read_u16(buf+8));
+        DPRINTF("Fdatime(%#x,%d,%d)\n",read_u32(buf+2),read_u16(buf+6),read_u16(buf+8));
         no_action_required();
         break;
       case 0x4b:  // Pexec
@@ -1255,11 +1261,11 @@ static void *gemdos_thread(void *ptr) {
         drive_init(read_u32(buf),read_u32(buf+4));
         break;
       default:
-        printf("gemdos_opcode=%d\n",gemdos_opcode);
+        DPRINTF("gemdos_opcode=%d\n",gemdos_opcode);
         for (i=0;i<16;++i) {
-          printf("%02x ",buf[i]);
+          DPRINTF("%02x ",buf[i]);
         }
-        printf("\n");
+        DPRINTF("\n");
       }
     }
   }
@@ -1339,15 +1345,15 @@ void gemdos_acsi_cmd(void) {
         acsi_wait_data(NULL,16);
       } else {
         // Ignore commands
-        printf("Ignored: %#x ",gemdos_opcode);
+        DPRINTF("Ignored: %#x ",gemdos_opcode);
         switch (gemdos_opcode) {
-        case 0x20: printf("Super"); break;
-        case 0x31: printf("Ptermres"); break;
-        case 0x48: printf("Malloc"); break;
-        case 0x49: printf("Mfree"); break;
-        case 0x4a: printf("Mshrink"); break;
+        case 0x20: DPRINTF("Super"); break;
+        case 0x31: DPRINTF("Ptermres"); break;
+        case 0x48: DPRINTF("Malloc"); break;
+        case 0x49: DPRINTF("Mfree"); break;
+        case 0x4a: DPRINTF("Mshrink"); break;
         }
-        printf("\n");
+        DPRINTF("\n");
         *acsireg = STATUS_OK;
       }
     } else if (op==OP_ACTION) {
