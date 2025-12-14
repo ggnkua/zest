@@ -205,12 +205,13 @@ action_loop:
 	move	jtbl(pc,d0.w),d0
 	jmp	jtbl(pc,d0.w)
 
-jtbl:	dc.w	action_fallback-jtbl	; Fallback to TOS code
+jtbl:	dc.w	action_fallback-jtbl	; Fall back to TOS code
 	dc.w	action_return-jtbl	; Return from GEMDOS
 	dc.w	action_rdmem-jtbl	; Read from memory
 	dc.w	action_wrmem-jtbl	; Write to memory
 	dc.w	action_wrmem0-jtbl	; Write to memory then return 0
 	dc.w	action_gemdos-jtbl	; GEMDOS call
+	dc.w	action_patch-jtbl	; patch the stack and fall back
 
 action_gemdos:
 ; Call GEMDOS
@@ -285,6 +286,25 @@ action_wrmem0:
 	bsr	write_mem
 	moveq	#0,d1
 	bra	endcmd
+
+action_patch:
+	move	usp,a1		; user call stack
+	btst.b	#5,8(sp)	; called from supervisor mode?
+	beq.s	apusr
+	lea	8+6(sp),a1	; supervisor call stack
+	tst	$59e.w		; _longframe
+	beq.s	apusr
+	addq.l	#2,a1		; two additional bytes on 030+
+apusr:	move	(a0)+,d0	; size of data
+	lsr	#2,d0		; number of longs
+	bcc.s	apl0		; odd number of words?
+	move.w	(a0)+,(a1)+	; copy single word
+apl0:	subq.w	#1,d0		; number of longs-1
+	bcs.s	apl2
+apl1:	move.l	(a0)+,(a1)+
+	dbra	d0,apl1
+apl2:
+
 
 action_fallback:
 	moveq	#0,d0

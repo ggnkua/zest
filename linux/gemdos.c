@@ -82,6 +82,7 @@
 #define ACTION_WRMEM    3               /* Write to memory */
 #define ACTION_WRMEM0   4               /* Write to memory then return 0 */
 #define ACTION_GEMDOS   5               /* GEMDOS call */
+#define ACTION_MODSTACK 6               /* modify calling stack and fallback */
 
 /* GEMDOS file attribute flags */
 #define FA_READONLY 0x01                /* Include files which are read-only */
@@ -339,33 +340,6 @@ static void gemdos_return(int val) {
   acsi_send_reply(action,16);
 }
 
-static void Pexec(int mode, unsigned int pname, unsigned int pcmdline, int penv) {
-  char name[256],cmdline[256],env[256];
-  action_required();
-  if (penv==0)
-    strcpy(env,"0");
-  else if (penv==-1)
-    strcpy(env,"-1");
-  else
-    snprintf(env,sizeof env,"\"%s\"",gemdos_read_string(penv));
-
-  switch (mode) {
-    case 0:
-      strncpy(name,gemdos_read_string(pname),256);
-      strncpy(cmdline,gemdos_read_string(pcmdline),256);
-      printf("Pexec(%d,\"%s\",\"%s\",%s)\n",mode,name,cmdline,env);
-      break;
-    case 5:
-      strncpy(cmdline,gemdos_read_string(pcmdline),256);
-      printf("Pexec(%d,%#x,\"%s\",%s)\n",mode,pname,cmdline,env);
-      break;
-    default:
-      printf("Pexec(%d,%#x,%#x,%s)\n",mode,pname,pcmdline,env);
-  }
-  gemdos_fallback();
-}
-
-
 // Compare a unix file name and a DOS file name
 // returns 0 if names match
 static int namecmp(const char *uname, const char *dname) {
@@ -486,6 +460,163 @@ struct _file_search {
   unsigned int attr;
   DIR *d;
 };
+
+static void Pexec(int mode, unsigned int pname, unsigned int pcmdline, int penv) {
+  char path_gemdos[1024],path_host[1024],cmdline[1024],env[1024];
+  char printedenv[1026];
+  action_required();
+  if (penv==0)
+    strcpy(printedenv,"0");
+  else if (penv==-1)
+    strcpy(printedenv,"-1");
+  else {
+    strncpy(env,gemdos_read_string(penv),1024);
+    snprintf(printedenv,sizeof printedenv,"\"%s\"",env);
+  }
+
+  switch (mode) {
+    case 0:
+    case 3:
+      strncpy(path_gemdos,gemdos_read_string(pname),1024);
+      strncpy(cmdline,gemdos_read_string(pcmdline),1024);
+      printf("Pexec(%d,\"%s\",\"%s\",%s)\n",mode,path_gemdos,cmdline,printedenv);
+      int retval = path_lookup(path_host,path_gemdos);
+      if (retval==-2) {
+        // not on managed drive
+        gemdos_fallback();
+        return;
+      }
+      if (retval==-1) {
+        // invalid path
+        gemdos_return(-34);   // EPTHNF
+        return;
+      }
+      if (retval==0 || retval==2) {
+        // directory found or missing file
+        gemdos_return(-33);   // EFILNF
+        return;
+      }
+      write_u16(action,ACTION_GEMDOS);
+      write_u16(action+2,16);
+      write_u16(action+4,0x4b);     // Pexec
+      write_u16(action+6,5);        // mode 5: create basepage
+      write_u32(action+8,0);
+      write_u32(action+12,pcmdline);
+      write_u32(action+16,penv);
+      // wait for stub to perform an OP_ACTION command
+      if (gemdos_cond_wait(500)) {
+        printf("error load_prg\n");
+        return;
+      }
+      acsi_send_reply(action,20);
+
+      // wait for OP_RESULT command and sectors from DMA
+      int ret = gemdos_cond_wait(500);
+      if (ret!=0) {
+        printf("error load_prg 2\n");
+        return;
+      }
+      *acsireg = STATUS_OK;
+      unsigned int pbasepage = read_u32((uint8_t*)iobuf);
+
+      // create program environment
+      int fd = open(path_host,O_RDONLY);
+      int size = lseek(fd,0,SEEK_END);
+      lseek(fd,0,SEEK_SET);
+      uint8_t *progbuf = malloc(256-28+size);
+      gemdos_read_memory(progbuf,pbasepage,256);
+      unsigned char header[28];
+      read(fd,header,28);
+      read(fd,progbuf+256,size-28);
+      close(fd);
+      // update DTA
+      int sz_text = read_u32(header+2);
+      int sz_data = read_u32(header+6);
+      int sz_bss = read_u32(header+10);
+      unsigned int ptr = pbasepage + 256;
+      write_u32(progbuf+8,ptr);         // program section address
+      write_u32(progbuf+12,sz_text);    // program section size
+      ptr += sz_text;
+      write_u32(progbuf+16,ptr);        // data section address
+      write_u32(progbuf+20,sz_data);    // data section size
+      ptr += sz_data;
+      write_u32(progbuf+24,ptr);        // BSS section address
+      write_u32(progbuf+28,sz_bss);     // BSS section size
+      ptr = pbasepage + 256;
+      // relocate
+      if (read_u16(header+26)==0) {
+        uint8_t *rdat = progbuf+256+sz_text+sz_data;
+        uint8_t *dest = progbuf+256;
+        unsigned int offset = read_u32(rdat);
+        dest += offset;
+        rdat += 4;
+        while (offset) {
+          write_u32(dest,read_u32(dest)+ptr);
+          do {
+            offset = *rdat++;
+            dest += (offset==1)?254:offset;
+          } while (offset==1);
+        }
+      }
+      // clear BSS
+      unsigned int length = 256+sz_text+sz_data+sz_bss;
+      progbuf = realloc(progbuf,length);
+      memset(progbuf+256+sz_text+sz_data,0,sz_bss);
+      // send the program block
+      const uint8_t *src = progbuf;
+      uint8_t buf[512*DMABUFSZ*2];
+      int buf_id = 0;
+      const int blksz = 512*DMABUFSZ-8;
+      unsigned int addr = pbasepage;
+      while (length>0) {
+        uint8_t *pbuf = buf+512*DMABUFSZ*buf_id;
+        unsigned int n = length<blksz?length:blksz;
+        memcpy(pbuf+8,src,n);
+        // wait for stub to perform an OP_ACTION command
+        int ret = gemdos_cond_wait(500);
+        if (ret!=0) {
+          printf("error load_prg 3\n");
+          return;
+        }
+        write_u16(pbuf,ACTION_WRMEM);
+        write_u32(pbuf+2,addr);
+        write_u16(pbuf+6,n);
+        acsi_send_reply(pbuf,8+n);
+        src += n;
+        addr += n;
+        length -= n;
+        buf_id = 1-buf_id;
+      }
+      free(progbuf);
+      if (mode==3) {
+        gemdos_return(pbasepage);
+        break;
+      }
+      // patch stack
+      write_u16(action,ACTION_MODSTACK);
+      write_u16(action+2,16);
+      write_u16(action+4,0x4b);   // Pexec
+      write_u16(action+6,4);      // mode
+      write_u32(action+8,0);
+      write_u32(action+12,pbasepage);
+      write_u32(action+16,0);
+      // wait for stub to perform an OP_ACTION command
+      if (gemdos_cond_wait(500)) {
+        printf("error load_prg 4\n");
+        return;
+      }
+      acsi_send_reply(action,20);
+      break;
+    case 5:
+      strncpy(cmdline,gemdos_read_string(pcmdline),1024);
+      printf("Pexec(%d,%#x,\"%s\",%s)\n",mode,pname,cmdline,printedenv);
+      gemdos_fallback();
+      break;
+    default:
+      printf("Pexec(%d,%#x,%#x,%s)\n",mode,pname,pcmdline,printedenv);
+      gemdos_fallback();
+  }
+}
 
 // check whether a file name matches a search pattern
 static int match_dos_pattern(const char *pattern, const char *string) {
