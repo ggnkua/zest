@@ -1174,7 +1174,7 @@ static void drive_init(unsigned int begin_adr, unsigned int resblk_adr) {
   presblk = resblk_adr;
   action_required();
   unsigned int drvbits = gemdos_read_long(0x4c2);
-  DPRINTF("Driver init, begin:%#x, resblk:%#x, size:%u, drvbits:%u\n",begin_adr,resblk_adr,resblk_adr-begin_adr+28+512*BUFSIZ,drvbits);
+  DPRINTF("Driver init, begin:%#x, resblk:%#x, size:%u, drvbits:%u\n",begin_adr,resblk_adr,resblk_adr-begin_adr+28+512*DMABUFSZ,drvbits);
   gemdos_drv = 2;
   while (drvbits&(1<<gemdos_drv)) ++gemdos_drv;
   gemdos_write_long(0x4c2,drvbits|(1<<gemdos_drv));
