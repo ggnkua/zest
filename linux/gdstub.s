@@ -452,7 +452,7 @@ acsi_scan_lp:
 	move.b	d7,drive_id
 	bsr	install_super
 	beq.s	acsi_scan_end
-	add	#$20,d7		; next ID
+	add.b	#$20,d7		; next ID
 	bne.s	acsi_scan_lp
 	moveq	#1,d0		; not found
 acsi_scan_end:
