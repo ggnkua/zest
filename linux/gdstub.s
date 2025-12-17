@@ -54,9 +54,6 @@ sclp:	cmp.l	$4ba.w,d4	; _hz_200
 	move	d4,2(a6)
 	move	d5,(a6)		; set sector count
 scnodma:
-	moveq	#0,d4
-	move.b	drive_id(pc),d4	; move id bits to 7-5
-
 	move	d3,d0		; direction bit
 	move.b	#$88,d0		; first command byte: DRQ:internal, CS:external, A1=0
 	move	d0,2(a6)	; first DMA control value
@@ -70,7 +67,7 @@ scnodma:
 	move.b	#$1f,d1		; ICD extended command
 	subq.l	#1,a0		; actual command byte will be sent next
 	addq	#1,d2		; one more byte to send
-scsreg:	or.b	d4,d1		; add drive id
+scsreg:	or.b	drive_id(pc),d1	; add drive id
 	bra.s	scss
 scsb:	swap	d1
 	move.b	(a0)+,d1	; next command byte
