@@ -164,7 +164,7 @@ gdfb:
 
 ; d0: GEMDOS code
 manage_command:
-	move.l	d3,-(sp)
+	movem.l	d2-d3/a2,-(sp)
 	lea	resblk(pc),a0
 	st	$43e.w		; flock
 	bsr	set_dma_ptr
@@ -286,9 +286,9 @@ action_wrmem0:
 
 action_patch:
 	move	usp,a1		; user call stack
-	btst.b	#5,8(sp)	; called from supervisor mode?
+	btst.b	#5,16(sp)	; called from supervisor mode?
 	beq.s	apusr
-	lea	8+6(sp),a1	; supervisor call stack
+	lea	16+6(sp),a1	; supervisor call stack
 	tst	$59e.w		; _longframe
 	beq.s	apusr
 	addq.l	#2,a1		; two additional bytes on 030+
@@ -312,7 +312,7 @@ action_return:
 	bra	endcmd
 
 endcmd:
-	move.l	(sp)+,d3
+	movem.l	(sp)+,d2-d3/a2
 	rts
 
 send_result:
