@@ -39,9 +39,6 @@ send_command:
 	movem.l	d4-d5/a6,-(sp)
 
 	lsl	#8,d3		; read(0) / write($100)
-	move.l	next_time(pc),d4
-sclp:	cmp.l	$4ba.w,d4	; _hz_200
-	bpl.s	sclp
 
 	lea	$ffff8604.w,a6	; DMA data / control
 
@@ -96,9 +93,6 @@ scgetstatus:
 	move	(a6),d0		; get status
 
 scend:
-	move.l	$4ba.w,d1
-	addq.l	#1,d1
-	move.l	d1,next_time
 	movem.l	(sp)+,d4-d5/a6
 	tst	d0
 	rts
@@ -369,7 +363,6 @@ wrmend:
 
 drive_id:	dc.b	0	; ACSI drive ID << 5
 	even
-next_time:	dc.l	0
 cdb:		dcb.b	10,0
 resblk:
 
