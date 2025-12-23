@@ -633,6 +633,7 @@ static void Pexec(int mode, unsigned int pname, unsigned int pcmdline, int penv)
       acsi_send_reply(action,20);
       break;
     case 5:
+    case 7:
       strncpy(cmdline,gemdos_read_string(pcmdline),1024);
       DPRINTF("Pexec(%d,%#x,\"%s\",%s)\n",mode,pname,cmdline,printedenv);
       gemdos_fallback();
