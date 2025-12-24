@@ -1180,6 +1180,10 @@ static void drive_init(unsigned int begin_adr, unsigned int resblk_adr) {
   while (drvbits&(1<<gemdos_drv)) ++gemdos_drv;
   gemdos_write_long(0x4c2,drvbits|(1<<gemdos_drv));
   gemdos_printf("GEMDOS drive installed as drive %c:",'A'+gemdos_drv);
+  if (gemdos_drv==2) {
+    // if drive is C:, set it as the current drive
+    current_drv = 2;
+  }
   gemdos_fallback();
 }
 
