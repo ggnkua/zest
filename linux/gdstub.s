@@ -70,7 +70,7 @@ scsb:	swap	d1
 	move.b	(a0)+,d1	; next command byte
 scss:	swap	d1
 	move.l	d1,(a6)		; command byte + next DMA control value
-	bsr	irqwait5
+	bsr	irqwait50
 	bmi.s	sctimeout	; timeout: error
 	dbra	d2,scsb
 
@@ -85,7 +85,7 @@ scss:	swap	d1
 	bmi.s	sctimeout	; timeout: error
 	bra.s	scgetstatus
 scnodma2:
-	bsr	irqwait5
+	bsr	irqwait50
 	bmi.s	sctimeout	; timeout: error
 scgetstatus:
 	move	#$8a,2(a6)	; status register
@@ -94,7 +94,6 @@ scgetstatus:
 
 scend:
 	movem.l	(sp)+,d4-d5/a6
-	tst	d0
 	rts
 sctimeout:
 	moveq	#-1,d0
@@ -117,9 +116,9 @@ set_dma_ptr:
 irqwait3000:
 	move.l	#600,d0		; 3000 ms
 	bra.s	irqwait
-; wait for IRQ, 5 ms timeout
-irqwait5:
-	moveq.l	#1,d0		; 5 ms
+; wait for IRQ, 50 ms timeout
+irqwait50:
+	moveq.l	#10,d0		; 50 ms
 irqwait:
 	add.l	$4ba.w,d0	; _hz_200
 iwlp:	btst	#5,$fffffa01.w
