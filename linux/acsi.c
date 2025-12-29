@@ -269,8 +269,6 @@ void mode_sense_4(uint8_t *outBuf) {
 }
 
 void acsi_interrupt(void) {
-  unsigned int reg = *acsireg;
-
   if (dma_mode==1) {
     // a DMA read command is running
     read_next();
@@ -281,6 +279,9 @@ void acsi_interrupt(void) {
     write_next();
     return;
   }
+
+  // Not a DMA interrupt: command byte reception
+  unsigned int reg = *acsireg;
 
   int d = reg&0xff;
   int a1 = (reg>>8)&1;
