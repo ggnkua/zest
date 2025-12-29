@@ -71,7 +71,7 @@ scsb:	swap	d1
 scss:	swap	d1
 	move.l	d1,(a6)		; command byte + next DMA control value
 	bsr	irqwait50
-	bmi.s	sctimeout	; timeout: error
+	bmi.s	scend		; timeout: error
 	dbra	d2,scsb
 
 	move.b	#$00,d1		; DRQ:external, CS:internal, A1=0
@@ -82,34 +82,17 @@ scss:	swap	d1
 	tst	d5
 	beq.s	scnodma2
 	bsr	irqwait3000
-	bmi.s	sctimeout	; timeout: error
+	bmi.s	scend		; timeout: error
 	bra.s	scgetstatus
 scnodma2:
 	bsr	irqwait50
-	bmi.s	sctimeout	; timeout: error
+	bmi.s	scend		; timeout: error
 scgetstatus:
 	move	#$8a,2(a6)	; status register
 	moveq	#0,d0
 	move	(a6),d0		; get status
-
 scend:
 	movem.l	(sp)+,d4-d5/a6
-	rts
-sctimeout:
-	moveq	#-1,d0
-	bra.s	scend
-
-
-; set DMA pointer
-set_dma_ptr:
-	move.l	d0,-(sp)
-	move.l	a0,d0
-	move.b	d0,$ffff860d.w	; DMA pointer, low byte
-	lsr	#8,d0
-	move.b	d0,$ffff860b.w	; DMA pointer, mid byte
-	swap	d0
-	move.b	d0,$ffff8609.w	; DMA pointer, high byte
-	move.l	(sp)+,d0
 	rts
 
 ; wait for IRQ, 3 s timeout
@@ -128,6 +111,18 @@ iwlp:	btst	#5,$fffffa01.w
 	moveq	#-1,d0		; timeout
 	rts
 iwac:	moveq	#0,d0
+	rts
+
+; set DMA pointer
+set_dma_ptr:
+	move.l	d0,-(sp)
+	move.l	a0,d0
+	move.b	d0,$ffff860d.w	; DMA pointer, low byte
+	lsr	#8,d0
+	move.b	d0,$ffff860b.w	; DMA pointer, mid byte
+	swap	d0
+	move.b	d0,$ffff8609.w	; DMA pointer, high byte
+	move.l	(sp)+,d0
 	rts
 
 	dc.l	'XBRA','zeST',0
