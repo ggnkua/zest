@@ -1023,6 +1023,29 @@ static void Fseek(int offset, int handle, int mode) {
   gemdos_return(off);
 }
 
+static void Dgetpath(unsigned int ppath, unsigned int drive) {
+  char path_gemdos[1024];
+  DPRINTF("Dgetpath(%#x,%d)\n",ppath,drive);
+  if ((drive==0&&current_drv!=gemdos_drv) || (drive>0&&drive-1!=gemdos_drv)) {
+    no_action_required();
+    return;
+  }
+  action_required();
+  const char *src = current_path+strlen(config.gemdos);
+  while (*src=='/') ++src;
+  char *dest = path_gemdos;
+  *dest++ = '\\';
+  char c;
+  while ((c=*src++)) {
+    if (c=='/') c = '\\';
+    else c = toupper(c);
+    *dest++ = c;
+  }
+  *dest++ = 0;
+  gemdos_write_memory(path_gemdos,ppath,strlen(path_gemdos)+1);
+  gemdos_return(0);
+}
+
 static void Dfree(unsigned int diskinfo_addr, unsigned int drive) {
   unsigned char diskinfo[16];
   DPRINTF("Dfree(%#x,%d)\n",diskinfo_addr,drive);
@@ -1260,6 +1283,9 @@ static void *gemdos_thread(void *ptr) {
         DPRINTF("Fattrib(\"%s\".%d,%d)\n",gemdos_read_string(read_u32(buf+2)),wflag,attrib);
         gemdos_fallback();
         break;
+      case 0x47:  // Dgetpath
+        Dgetpath(read_u32(buf+2),read_u16(buf+6));
+        break;
       case 0x4b:  // Pexec
         Pexec(read_u16(buf+2),read_u32(buf+4),read_u32(buf+8),read_u32(buf+12));
         break;
@@ -1356,6 +1382,7 @@ void gemdos_acsi_cmd(void) {
         || gemdos_opcode==0x41  // Fdelete
         || gemdos_opcode==0x42  // Fseek
         || gemdos_opcode==0x43  // Fattrib
+        || gemdos_opcode==0x47  // Dgetpath
         || gemdos_opcode==0x4b  // Pexec
         || gemdos_opcode==0x4e  // Fsfirst
         || gemdos_opcode==0x56  // Frename
