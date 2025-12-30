@@ -748,18 +748,24 @@ static void next_file(void) {
 static void Fsfirst(unsigned int pname, unsigned int attr) {
   char path_gemdos[1024];
   char path_host[1024];
+  char pattern[256];
   action_required();
   strncpy(path_gemdos,gemdos_read_string(pname),sizeof path_gemdos);
   DPRINTF("Fsfirst(\"%s\",%d)\n",path_gemdos,attr);
 
   // separate pattern from path
-  char *pattern = strrchr(path_gemdos,'\\');
+  char *pos = strrchr(path_gemdos,'\\');
   char *path;
-  if (pattern==NULL) {
-    pattern = path_gemdos;
+  if (pos==NULL) {
+    strcpy(pattern,path_gemdos);
     path = "";
   } else {
-    *pattern++ = '\0';
+    strcpy(pattern,pos+1);
+    if (pos-path_gemdos==2) {
+      // path+pattern of the form "C:\*.*" -> keep the "\"
+      ++pos;
+    }
+    *pos++ = '\0';
     path = path_gemdos;
   }
 
