@@ -324,13 +324,16 @@ static void display_entry(ListView *lv, int line_no) {
   case LV_ENTRY_FILE: {
     const struct lv_file *fl = (struct lv_file*)e;
     const char *filename = *fl->filename;
-    if (filename) {
+    if (filename&&strcmp(filename,"/")) {
       const char *sep = strrchr(filename,'/');
       if (sep && fl->flags & LV_FILE_DIRECTORY) {
-        do { --sep; } while (sep>filename && *sep!='/');
+        if (sep) {
+          do { --sep; } while (sep>filename && *sep!='/');
+        }
+      } else {
+        if (!filename[0]) filename = NULL;
       }
       if (sep) filename = sep+1;
-      if (!filename[0]) filename = NULL;
     }
     font_render_text(lv_font,bitmap,raster_count,2,font_height,(raster_count-N_RASTER_FILE)*16,0,e->title);
     font_render_text_centered(lv_font,bitmap+raster_count-N_RASTER_FILE,raster_count,2,font_height,N_RASTER_FILE*16,filename?filename:"<empty>");
@@ -736,12 +739,20 @@ int lv_run(ListView *lv) {
           if (e->type==LV_ENTRY_FILE) {
             const struct lv_file *lf = (struct lv_file*)e;
             if ((lf->flags&LV_FILE_EJECTABLE) && *lf->filename) {
-              char *p = (char*)strrchr(*lf->filename,'/');
-              if (p) {
+              if (lf->flags&LV_FILE_EJECTABLE) {
+                free((void*)*lf->filename);
+                *lf->filename = NULL;
                 osd_hide();
-                p[1] = '\0';
                 lv_draw(lv);
                 osd_show();
+              } else {
+                char *p = (char*)strrchr(*lf->filename,'/');
+                if (p) {
+                  osd_hide();
+                  p[1] = '\0';
+                  lv_draw(lv);
+                  osd_show();
+                }
               }
             }
           }

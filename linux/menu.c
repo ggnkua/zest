@@ -189,6 +189,7 @@ static int tools(void) {
 
 static int hard_disks(void) {
   char tmp_hdd[8][1024] = {0};
+  const char *tmp_gemdos = config.gemdos;
   int i;
   int hdd_set = 0;
   for (i=0;i<8;++i) {
@@ -210,6 +211,7 @@ static int hard_disks(void) {
     sprintf(buf,"ACSI %d",i);
     lv_add_file(lv,buf,&config.acsi[i],LV_FILE_EJECTABLE,filter_img);
   }
+  lv_add_file(lv,"GEMDOS drive",&config.gemdos,LV_FILE_EJECTABLE|LV_FILE_DIRECTORY,filter_directory);
   lv_run(lv);
 
   int ret = 0;
@@ -222,6 +224,9 @@ static int hard_disks(void) {
     }
   }
   if (hdd_set2!=hdd_set) {
+    ret = 1;
+  }
+  if (config.gemdos!=tmp_gemdos) {
     ret = 1;
   }
   return ret;
