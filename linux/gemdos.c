@@ -228,6 +228,28 @@ static void action_required(void) {
   *acsireg = STATUS_ERROR;
 }
 
+// convert POSIX UTC time to DOS time/date
+static void u2d_time(time_t time, unsigned int *ptime, unsigned int *pdate) {
+  struct tm tm_info;
+  time += 3600*(config.timezone-12);
+  localtime_r(&time,&tm_info);
+  *ptime = tm_info.tm_hour<<11 | tm_info.tm_min<<5 | tm_info.tm_sec>>1;
+  *pdate = (tm_info.tm_year-80)<<9 | (tm_info.tm_mon+1)<<5 | tm_info.tm_mday;
+}
+
+// convert DOS time/date to POSIX UTC
+static time_t d2u_time(unsigned int time, unsigned int date) {
+  struct tm tm_info = {0};
+  tm_info.tm_sec = (time&0x1f)<<1;
+  tm_info.tm_min = (time&0x7e0)>>5;
+  tm_info.tm_hour = (time&0xf800)>>11;
+  tm_info.tm_mday = date&0x1f;
+  tm_info.tm_mon = ((date&0x1e0)>>5)-1;
+  tm_info.tm_year = ((date&0xfe00)>>9)+80;
+  tm_info.tm_gmtoff = 3600*(config.timezone-12);
+  return mktime(&tm_info);
+}
+
 // get bytes from address (stub must be in action mode)
 // set nbytes to 0 if reading a null-terminated string
 static void gemdos_read_memory(unsigned char *buf, unsigned int addr, unsigned int nbytes) {
@@ -711,11 +733,8 @@ static void next_file(void) {
   fs->path[fs->path_len] = '\0';
   write_u32(dta.d_length,st.st_size);
 
-  struct tm tm_info;
-  time_t ftime = st.st_mtim.tv_sec + 3600*(config.timezone-12);
-  localtime_r(&ftime,&tm_info);
-  unsigned int time = tm_info.tm_hour<<11 | tm_info.tm_min<<5 | tm_info.tm_sec>>1;
-  unsigned int date = (tm_info.tm_year-80)<<9 | (tm_info.tm_mon+1)<<5 | tm_info.tm_mday;
+  unsigned int time,date;
+  u2d_time(st.st_mtim.tv_sec,&time,&date);
   write_u16(dta.d_time,time);
   write_u16(dta.d_date,date);
   unsigned int attrib = 0;
@@ -1136,6 +1155,35 @@ static void Frename(unsigned int poldname,unsigned int pnewname) {
   gemdos_return(0);
 }
 
+static void Fdatime(unsigned int timeptr, int handle, int wflag) {
+  DPRINTF("Fdatime(%#x,%d,%d)\n",timeptr,handle,wflag);
+  if (handle<0x7a00) {
+    // not locally managed file
+    no_action_required();
+    return;
+  }
+  action_required();
+  uint8_t buf[4];
+  if (wflag==0) {
+    struct stat st;
+    unsigned int time,date;
+    fstat(handle-0x7a00,&st);
+    u2d_time(st.st_mtim.tv_sec,&time,&date);
+    write_u16(buf,time);
+    write_u16(buf+2,date);
+    gemdos_write_memory(buf,timeptr,4);
+    gemdos_return(0);
+  } else if (wflag==1) {
+    struct timespec ts[2];
+    gemdos_read_memory(buf,timeptr,4);
+    ts[0].tv_sec = d2u_time(read_u16(buf),read_u16(buf+2));
+    ts[0].tv_nsec = 0;
+    ts[1] = ts[0];
+    futimens(handle-0x7a00,ts);
+  }
+  gemdos_return(0);
+}
+
 // Called by stub at initialisation
 static void drive_init(unsigned int begin_adr, unsigned int resblk_adr) {
   presblk = resblk_adr;
@@ -1212,10 +1260,6 @@ static void *gemdos_thread(void *ptr) {
         DPRINTF("Fattrib(\"%s\".%d,%d)\n",gemdos_read_string(read_u32(buf+2)),wflag,attrib);
         gemdos_fallback();
         break;
-      case 0x57:  // Fdatime
-        DPRINTF("Fdatime(%#x,%d,%d)\n",read_u32(buf+2),read_u16(buf+6),read_u16(buf+8));
-        no_action_required();
-        break;
       case 0x4b:  // Pexec
         Pexec(read_u16(buf+2),read_u32(buf+4),read_u32(buf+8),read_u32(buf+12));
         break;
@@ -1227,6 +1271,9 @@ static void *gemdos_thread(void *ptr) {
         break;
       case 0x56:  // Frename
         Frename(read_u32(buf+4),read_u32(buf+8));
+        break;
+      case 0x57:  // Fdatime
+        Fdatime(read_u32(buf+2),read_u16(buf+6),read_u16(buf+8));
         break;
       case 0xffff:  // driver initialisation
         drive_init(read_u32(buf),read_u32(buf+4));
