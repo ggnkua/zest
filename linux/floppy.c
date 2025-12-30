@@ -43,8 +43,8 @@ static Flopimg *img[2] = {NULL,NULL};
 
 // change or eject the floppy disk
 void change_floppy(const char *filename, int drive) {
-  if (!filename) filename = "";
-  if (!strncmp(filename,img_name[drive],sizeof img_name[drive])) {
+  const char *nnfname = filename?filename:"";
+  if (!strncmp(nnfname,img_name[drive],sizeof img_name[drive])) {
     // same file - do nothing
     return;
   }
