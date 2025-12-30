@@ -201,13 +201,21 @@ static int gemdos_error_code(void) {
   }
 }
 
-static int gemdos_cond_wait(int timeout_ms) {
+static int gemdos_cond_wait(int timeout_ms, const char *from) {
   struct timespec ts;
   clock_gettime(CLOCK_REALTIME_COARSE,&ts);
   uint64_t tm = ts.tv_sec*1000 + ts.tv_nsec/1000000 + timeout_ms;
   ts.tv_sec = tm/1000;
   ts.tv_nsec = (tm%1000)*1000000;
-  return pthread_cond_timedwait(&cond,&mut,&ts);
+  int retval = pthread_cond_timedwait(&cond,&mut,&ts);
+  if (retval!=0) {
+    if (retval==ETIMEDOUT) {
+      //printf("%s: gemdos_cond_wait timed out\n",from);
+    } else {
+      printf("%s: gemdos_cond_wait error\n",from);
+    }
+  }
+  return retval;
 }
 
 // terminate ACSI command, signaling no action is required
@@ -225,22 +233,14 @@ static void action_required(void) {
 static void gemdos_read_memory(unsigned char *buf, unsigned int addr, unsigned int nbytes) {
   result = buf;
   // wait for stub to perform an OP_ACTION command
-  int ret = gemdos_cond_wait(500);
-  if (ret!=0) {
-    printf("error gemdos_read_memory\n");
-    return;
-  }
+  if (gemdos_cond_wait(500,"gemdos_read_memory")!=0) return;
   write_u16(action,ACTION_RDMEM);
   write_u32(action+2,addr);
   write_u16(action+6,nbytes);
   acsi_send_reply(action,16);
 
   // wait for OP_RESULT command and sectors from DMA
-  ret = gemdos_cond_wait(500);
-  if (ret!=0) {
-    printf("error gemdos_read_memory 2\n");
-    return;
-  }
+  if (gemdos_cond_wait(500,"gemdos_read_memory 2")!=0) return;
   *acsireg = STATUS_OK;
   //return (const uint8_t*)iobuf;
 }
@@ -249,11 +249,7 @@ static void gemdos_read_memory(unsigned char *buf, unsigned int addr, unsigned i
 // ret0: if nonzero, terminate the action loop, having GEMDOS return 0
 static void gemdos_write_memory_generic(const void *buf, unsigned int addr, unsigned int nbytes, int ret0) {
   // wait for stub to perform an OP_ACTION command
-  int ret = gemdos_cond_wait(500);
-  if (ret!=0) {
-    printf("error gemdos_write_memory\n");
-    return;
-  }
+  if (gemdos_cond_wait(500,"gemdos_write_memory")!=0) return;
   write_u16(action,ret0?ACTION_WRMEM0:ACTION_WRMEM);
   write_u32(action+2,addr);
   write_u16(action+6,nbytes);
@@ -290,11 +286,7 @@ static unsigned int gemdos_read_long(unsigned int addr) {
 
 static unsigned int gemdos_printstr(const char *str) {
   // wait for stub to perform an OP_ACTION command
-  int ret = gemdos_cond_wait(500);
-  if (ret!=0) {
-    printf("error gemdos_printstr\n");
-    return -1;
-  }
+  if (gemdos_cond_wait(500,"gemdos_printstr")!=0) return -1;
   int len = strlen(str);
   write_u16(action,ACTION_GEMDOS);
   write_u16(action+2,6);
@@ -305,11 +297,8 @@ static unsigned int gemdos_printstr(const char *str) {
   acsi_send_reply(action,10+len+3);
 
   // wait for OP_RESULT command and sectors from DMA
-  ret = gemdos_cond_wait(500);
-  if (ret!=0) {
-    printf("error gemdos_printstr 2\n");
-    return -1;
-  }
+
+  if (gemdos_cond_wait(500,"gemdos_printstr 2")!=0) return -1;
   *acsireg = STATUS_OK;
   return read_i32((uint8_t*)iobuf);
 }
@@ -327,10 +316,7 @@ static void gemdos_printf(const char *fmt,...) {
 static void gemdos_fallback(void) {
   write_u16(action,ACTION_FALLBACK);
   // wait for stub to perform an OP_ACTION command
-  if (gemdos_cond_wait(500)) {
-    printf("error gemdos_fallback\n");
-    return;
-  }
+  if (gemdos_cond_wait(500,"gemdos_fallback")!=0) return;
   acsi_send_reply(action,16);
 }
 
@@ -339,10 +325,7 @@ static void gemdos_return(int val) {
   write_u16(action,ACTION_RETURN);
   write_u32(action+2,val);
   // wait for stub to perform an OP_ACTION command
-  if (gemdos_cond_wait(500)) {
-    printf("error gemdos_return\n");
-    return;
-  }
+  if (gemdos_cond_wait(500,"gemdos_return")!=0) return;
   acsi_send_reply(action,16);
 }
 
@@ -529,18 +512,11 @@ static void Pexec(int mode, unsigned int pname, unsigned int pcmdline, int penv)
       write_u32(action+12,pcmdline);
       write_u32(action+16,penv);
       // wait for stub to perform an OP_ACTION command
-      if (gemdos_cond_wait(500)) {
-        printf("error load_prg\n");
-        return;
-      }
+      if (gemdos_cond_wait(500,"load_prg")!=0) return;
       acsi_send_reply(action,20);
 
       // wait for OP_RESULT command and sectors from DMA
-      int ret = gemdos_cond_wait(500);
-      if (ret!=0) {
-        printf("error load_prg 2\n");
-        return;
-      }
+      if (gemdos_cond_wait(500,"load_prg 2")!=0) return;
       *acsireg = STATUS_OK;
       unsigned int pbasepage = read_u32((uint8_t*)iobuf);
 
@@ -598,11 +574,7 @@ static void Pexec(int mode, unsigned int pname, unsigned int pcmdline, int penv)
         unsigned int n = length<blksz?length:blksz;
         memcpy(pbuf+8,src,n);
         // wait for stub to perform an OP_ACTION command
-        int ret = gemdos_cond_wait(500);
-        if (ret!=0) {
-          printf("error load_prg 3\n");
-          return;
-        }
+        if (gemdos_cond_wait(500,"load_prg 3")!=0) return;
         write_u16(pbuf,ACTION_WRMEM);
         write_u32(pbuf+2,addr);
         write_u16(pbuf+6,n);
@@ -626,10 +598,7 @@ static void Pexec(int mode, unsigned int pname, unsigned int pcmdline, int penv)
       write_u32(action+12,pbasepage);
       write_u32(action+16,0);
       // wait for stub to perform an OP_ACTION command
-      if (gemdos_cond_wait(500)) {
-        printf("error load_prg 4\n");
-        return;
-      }
+      if (gemdos_cond_wait(500,"load_prg 4")!=0) return;
       acsi_send_reply(action,20);
       break;
     case 5:
@@ -939,11 +908,7 @@ static void Fread(int handle, unsigned int length, unsigned int addr) {
       return;
     }
     // wait for stub to perform an OP_ACTION command
-    int ret = gemdos_cond_wait(500);
-    if (ret!=0) {
-      printf("error Fread\n");
-      return;
-    }
+    if (gemdos_cond_wait(500,"Fread")!=0) return;
     write_u16(pbuf,ACTION_WRMEM);
     write_u32(pbuf+2,addr);
     write_u16(pbuf+6,rdb);
@@ -1192,7 +1157,7 @@ static void *gemdos_thread(void *ptr) {
   int i;
   pthread_mutex_lock(&mut);
   while (!thr_end) {
-    if (gemdos_cond_wait(200)==0) {
+    if (gemdos_cond_wait(200,"gemdos_thread")==0) {
       switch (gemdos_opcode) {
       case 0x0e:  // Dsetdrv
         current_drv = read_u16(buf+2);
