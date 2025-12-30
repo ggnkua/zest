@@ -204,7 +204,7 @@ static int gemdos_error_code(void) {
 static int gemdos_cond_wait(int timeout_ms, const char *from) {
   struct timespec ts;
   clock_gettime(CLOCK_REALTIME_COARSE,&ts);
-  uint64_t tm = ts.tv_sec*1000 + ts.tv_nsec/1000000 + timeout_ms;
+  uint64_t tm = ts.tv_sec*1000ull + ts.tv_nsec/1000000 + timeout_ms;
   ts.tv_sec = tm/1000;
   ts.tv_nsec = (tm%1000)*1000000;
   int retval = pthread_cond_timedwait(&cond,&mut,&ts);
