@@ -1244,6 +1244,9 @@ static void *gemdos_thread(void *ptr) {
 }
 
 // function called by the ACSI interrupt handler when a DMA write is finished
+// or when a GEMDOS command is received.
+// This allows the GEMDOS thread to wait for write completion or new commands
+// using gemdos_cond_wait()
 void gemdos_stub_call(void) {
   pthread_mutex_lock(&mut);
   pthread_cond_signal(&cond);
