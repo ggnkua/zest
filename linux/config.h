@@ -43,6 +43,7 @@ typedef struct {
   int shifter_wakestate;            // shifter wakestate (0-1)
   int scan_doubler_mode;            // scan doubler mode (0-1)
   const char *rom_file;             // ROM file, full path
+  int timezone;                     // local timezone (-12..12)
 
   // floppy
   const char *floppy_a;             // A: floppy image file, full path

@@ -712,7 +712,8 @@ static void next_file(void) {
   write_u32(dta.d_length,st.st_size);
 
   struct tm tm_info;
-  localtime_r(&st.st_mtim.tv_sec,&tm_info);
+  time_t ftime = st.st_mtim.tv_sec + 3600*(config.timezone-12);
+  localtime_r(&ftime,&tm_info);
   unsigned int time = tm_info.tm_hour<<11 | tm_info.tm_min<<5 | tm_info.tm_sec>>1;
   unsigned int date = (tm_info.tm_year-80)<<9 | (tm_info.tm_mon+1)<<5 | tm_info.tm_mday;
   write_u16(dta.d_time,time);

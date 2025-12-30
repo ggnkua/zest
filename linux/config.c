@@ -99,6 +99,11 @@ static int handler(void* user, const char* section, const char* name, const char
     }
   } else if (MATCH("main","rom_file")) {
     if (value) pconfig->rom_file = strdup(value);
+  } else if (MATCH("main","timezone")) {
+    int tz = atoi(value);
+    if (tz<-12) tz = -12;
+    if (tz>12) tz = 12;
+    pconfig->timezone = tz+12;
   } else if (MATCH("floppy","floppy_a")) {
     if (value) pconfig->floppy_a = strdup(value);
   } else if (MATCH("floppy","floppy_a_enable")) {
@@ -157,6 +162,7 @@ void config_init(void) {
   config.shifter_wakestate = 0;
   config.scan_doubler_mode = 0;
   config.rom_file = NULL;
+  config.timezone = 12;
   config.floppy_a = NULL;
   config.floppy_a_enable = 1;
   config.floppy_a_write_protect = 0;
@@ -211,6 +217,7 @@ void config_save(void) {
   fprintf(fd,"shifter_wakestate = %d\n",config.shifter_wakestate);
   fprintf(fd,"scan_doubler_mode = %d\n",config.scan_doubler_mode);
   fprintf(fd,"rom_file = %s\n",config.rom_file?config.rom_file:"");
+  fprintf(fd,"timezone = %d\n",config.timezone-12);
 
   fprintf(fd,"\n[floppy]\n");
   fprintf(fd,"floppy_a_enable = %s\n",config.floppy_a_enable?"true":"false");

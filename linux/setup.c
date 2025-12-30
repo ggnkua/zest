@@ -86,6 +86,7 @@ static void *thread_rtc(void *) {
     time_t t = time(NULL);
     if (t>315532800) {
       // date is older than 1980-1-1
+      t += 3600*(config.timezone-12);
       struct tm *tm = localtime(&t);
       // printf("%ld %4d-%02d-%02d %02d:%02d:%02d\n",(long int)t,tm->tm_year+1900,tm->tm_mon+1,tm->tm_mday,tm->tm_hour,tm->tm_min,tm->tm_sec);
       s_units = tm->tm_sec%10;

@@ -170,6 +170,9 @@ static int tools(void) {
     }
     lv_set_colour_change(lv,entry_height,1,menu_palette[1]);
 
+    lv_add_choice(lv,"Time zone",&config.timezone,25,
+      "UTC-12","UTC-11","UTC-10","UTC-9","UTC-8","UTC-7","UTC-6","UTC-5","UTC-4","UTC-3","UTC-2","UTC-1","UTC+0",
+      "UTC+1","UTC+2","UTC+3","UTC+4","UTC+5","UTC+6","UTC+7","UTC+8","UTC+9","UTC+10","UTC+11","UTC+12");
     int e_jbmode = lv_add_choice(lv,"Jukebox mode",&config.jukebox_enabled,2,"no","yes");
     if (config.jukebox_enabled) {
       lv_add_file(lv,"Jukebox directory",&config.jukebox_path,LV_FILE_DIRECTORY,filter_directory);
