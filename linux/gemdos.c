@@ -557,6 +557,7 @@ static void Pexec(int mode, unsigned int pname, unsigned int pcmdline, int penv)
       int sz_text = read_u32(header+2);
       int sz_data = read_u32(header+6);
       int sz_bss = read_u32(header+10);
+      int sz_sym = read_u32(header+14);
       unsigned int ptr = pbasepage + 256;
       write_u32(progbuf+8,ptr);         // program section address
       write_u32(progbuf+12,sz_text);    // program section size
@@ -569,7 +570,7 @@ static void Pexec(int mode, unsigned int pname, unsigned int pcmdline, int penv)
       ptr = pbasepage + 256;
       // relocate
       if (read_u16(header+26)==0) {
-        uint8_t *rdat = progbuf+256+sz_text+sz_data;
+        uint8_t *rdat = progbuf+256+sz_text+sz_data+sz_sym;
         uint8_t *dest = progbuf+256;
         unsigned int offset = read_u32(rdat);
         dest += offset;
