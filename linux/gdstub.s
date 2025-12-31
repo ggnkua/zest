@@ -388,7 +388,7 @@ inquiry:
 	bsr	send_command
 	sf	$43e.w		; flock
 
-	clr.b	rblk+32
+	sf	rblk+32
 	lea	rblk+8(pc),a0
 	rts
 
@@ -451,9 +451,7 @@ install_super:
 	bmi.s	unit_notfound
 
 	bsr	inquiry
-	beq.s	noerr_inquiry
-	lea	err_inq_txt(pc),a0
-noerr_inquiry:
+	bne.s	unit_notfound
 	cmp.b	#$a,rblk	; device type ($a: obsolete type id)
 	bne.s	unit_notfound
 
@@ -473,8 +471,6 @@ unit_notfound:
 	moveq	#1,d0
 	rts
 
-
-
 text_print:
 	move.l	a0,-(sp)
 	move	#9,-(sp)		; Cconws
@@ -488,7 +484,6 @@ text_print:
 hello_txt:	dc.b	13,10
 		dc.b	27,"p- zeST GEMDOS stub v0.0 -",27,"q",13,10
 		dc.b	$bd," 2025 Fran",$87,"ois Galea",13,10,0
-err_inq_txt:	dc.b	"inquiry error",13,10,0
 failed_txt:	dc.b	"Driver not installed",13,10,0
 
 	even
