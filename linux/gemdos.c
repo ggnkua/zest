@@ -488,6 +488,7 @@ struct _file_search {
   size_t path_len;
   char pattern[256];
   unsigned int attr;
+  int first;
   DIR *d;
 };
 
@@ -611,6 +612,8 @@ static void Pexec(int mode, unsigned int pname, unsigned int pcmdline, int penv)
         gemdos_return(pbasepage);
         break;
       }
+      // default DTA address
+      addr_dta = pbasepage+0x80;
       // patch stack
       write_u16(action,ACTION_MODSTACK);
       write_u16(action+2,16);
@@ -631,6 +634,10 @@ static void Pexec(int mode, unsigned int pname, unsigned int pcmdline, int penv)
       break;
     default:
       DPRINTF("Pexec(%d,%#x,%#x,%s)\n",mode,pname,pcmdline,printedenv);
+      if (mode==4 || mode==6) {
+        // default DTA address
+        addr_dta = pcmdline+0x80;
+      }
       gemdos_fallback();
   }
 }
@@ -696,10 +703,10 @@ static void next_file(void) {
     e = readdir(fs->d);
     if (e==NULL) {
       closedir(fs->d);
-      free(fs);
       memset(dta.d_reserved,0,16);
       gemdos_write_memory(&dta,addr_dta,16);
-      gemdos_return(-33);   // EFILNF
+      gemdos_return(fs->first?-33:-49);   // EFILNF/ENMFIL
+      free(fs);
       return;
     }
     if (match_dos_pattern(fs->pattern,e->d_name)) {
@@ -722,6 +729,7 @@ static void next_file(void) {
       }
     }
   }
+  fs->first = 0;
   // copy and convert the name to upper case
   const char *s = e->d_name;
   char *d = dta.d_fname;
@@ -791,6 +799,7 @@ static void Fsfirst(unsigned int pname, unsigned int attr) {
   strcpy(fs->pattern,pattern);
   fs->d = opendir(path_host);
   fs->attr = attr;
+  fs->first = 1;
   memcpy(dta.d_reserved,"zeST",4);
   memcpy(dta.d_reserved+4,&fs,sizeof fs);
   memcpy(dta.d_reserved+12,"zeST",4);
