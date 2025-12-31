@@ -650,30 +650,25 @@ static int match_dos_pattern(const char *pattern, const char *string) {
   const char *p = pattern;
   const char *s = string;
 
-  // Handle the special case where pattern is "*.*"
-  if (strcmp(pattern, "*.*") == 0) {
-    return 1;
-  }
-  // Standard matching logic
   while (*p) {
     if (*p == '*') {
       while (*p == '*')
         p++;
-      if (!*p)
-        return 1;
-
-      while (*s) {
+      while (*s&&*s!='.') {
         if (match_dos_pattern(p, s))
           return 1;
         s++;
       }
-      return 0;
+      if (!s)
+        return 1;
     } else if (*p == '?') {
       if (!*s)
         return 0;
       p++;
       s++;
     } else {
+      if (*p=='.'&&!strcmp(p,".*"))
+        return 1;
       if (tolower(*p) != tolower(*s))
         return 0;
       p++;
