@@ -10,6 +10,8 @@ fi
 
 mkdir -p output/drivers
 
+cp $ZEST_PATH/linux/gdstub.prg $ZEST_SETUP/output/drivers
+
 cd $ZEST_PATH/drivers
 make || exit $?
 cp extmod.prg $ZEST_SETUP/output/drivers
