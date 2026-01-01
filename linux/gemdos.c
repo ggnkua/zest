@@ -1218,6 +1218,12 @@ static void Fdatime(unsigned int timeptr, int handle, int wflag) {
   gemdos_return(0);
 }
 
+static void stub_detect(void) {
+  DPRINTF("stub detection\n");
+  action_required();
+  gemdos_return(0);
+}
+
 // Called by stub at initialisation
 static void drive_init(unsigned int begin_adr, unsigned int resblk_adr) {
   presblk = resblk_adr;
@@ -1312,6 +1318,9 @@ static void *gemdos_thread(void *ptr) {
       case 0x57:  // Fdatime
         Fdatime(read_u32(buf+2),read_u16(buf+6),read_u16(buf+8));
         break;
+      case 0x7a53:  // 'zS' zeST stub detection
+        stub_detect();
+        break;
       case 0xffff:  // driver initialisation
         drive_init(read_u32(buf),read_u32(buf+4));
         break;
@@ -1375,6 +1384,7 @@ void gemdos_acsi_cmd(void) {
       gemdos_opcode = read_u16(acsi_command+2);
       if (gemdos_opcode==0x19   // Dgetdrv
         || gemdos_opcode==0x4f  // Fsnext
+        || gemdos_opcode==0x7a53// 'zS' zeST stub detection
       ) {
         // commands without a data block
         gemdos_stub_call();

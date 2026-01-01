@@ -400,7 +400,7 @@ bootsec_install:
 	lea	hello_txt(pc),a0
 	bsr	text_print
 
-	bsr	install_super
+	bsr	install_device
 
 	movem.l	(sp)+,d3-d7/a3-a6
 	move.l	#end_resident-begin+28+512*DMABUFSZ,d0	; resident size
@@ -412,7 +412,14 @@ gemdos_install:
 	lea	hello_txt(pc),a0
 	bsr	text_print
 
-	pea	acsi_scan(pc)
+	move	#$7a53,-(sp)	; 'zS' zeST stub detection
+	trap	#1
+	addq.l	#2,sp
+	lea	already_txt(pc),a0
+	tst	d0
+	beq.s	noinstall
+
+	pea	dev_detect(pc)
 	move	#38,-(sp)	; Supexec
 	trap	#14
 	addq.l	#6,sp
@@ -427,26 +434,26 @@ gemdos_install:
 
 ; exit without installing
 noinstall:
-	lea	failed_txt(pc),a0
 	bsr	text_print
 	clr	-(sp)
 	trap	#1
 
 ; scan all ACSI devices
-acsi_scan:
+dev_detect:
 	moveq	#0,d7		; device ID<<5
 acsi_scan_lp:
 	move.b	d7,drive_id
-	bsr	install_super
+	bsr	install_device
 	beq.s	acsi_scan_end
 	add.b	#$20,d7		; next ID
 	bne.s	acsi_scan_lp
+	lea	failed_txt(pc),a0
 	moveq	#1,d0		; not found
 acsi_scan_end:
 	rts
 
 ; test device and set it up
-install_super:
+install_device:
 	bsr	testunit
 	bmi.s	unit_notfound
 
@@ -482,8 +489,9 @@ text_print:
 
 	section data
 hello_txt:	dc.b	13,10
-		dc.b	27,"p- zeST GEMDOS stub v0.0 -",27,"q",13,10
-		dc.b	$bd," 2025 Fran",$87,"ois Galea",13,10,0
+		dc.b	27,"p- zeST GEMDOS stub -",27,"q",13,10
+		dc.b	$bd," 2025-2026 Fran",$87,"ois Galea",13,10,0
+already_txt:	dc.b	"Driver already installed",13,10,0
 failed_txt:	dc.b	"Driver not installed",13,10,0
 
 	even
