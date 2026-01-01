@@ -1,6 +1,7 @@
 ---
 title: "Drivers"
 date: 2025-06-08
+lastmod: 2026-01-01
 ---
 
 zeST provides specific drivers to improve the use of zeST.
@@ -26,3 +27,11 @@ Since zeST uses a PC keyboard instead of the original ST keyboard, some keys do 
 To overcome this issue, [zkbd](https://codeberg.org/zerkman/zkbd) has been written, and provides drivers for several modern PC key maps.
 
 Pre-built binaries for zkbd can be found in the downloadable zeST archive, under the `drivers/zkbd` directory. Just copy the one corresponding to your keyboard into the `AUTO` folder of your boot disk.
+
+## GEMDOS drive stub
+
+The GEMDOS drive stub installs and lets the Linux host manage the [GEMDOS drive].
+It is available in two forms:
+
+ - Loaded from the bootsector when booting on the drive;
+ - Explicitly executed from another boot drive's `AUTO` folder. The program can be found on the zeST archive as the `drivers/gdstub.prg` program file.
