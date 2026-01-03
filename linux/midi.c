@@ -43,6 +43,10 @@ void midi_interrupt(void) {
     // printf("recv 0x%02x\n",(int)v);
     if (midi_out_fd!=-1)
       write(midi_out_fd,&v,1);
+    else {
+      // if no MIDI out device is set, use MIDI for logging
+      putchar(v);
+    }
   }
 }
 
