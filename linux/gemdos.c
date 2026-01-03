@@ -619,7 +619,7 @@ static void Pexec(int mode, unsigned int pname, unsigned int pcmdline, int penv)
       write_u16(action,ACTION_MODSTACK);
       write_u16(action+2,16);
       write_u16(action+4,0x4b);   // Pexec
-      write_u16(action+6,4);      // mode
+      write_u16(action+6,6);      // mode
       write_u32(action+8,0);
       write_u32(action+12,pbasepage);
       write_u32(action+16,0);
