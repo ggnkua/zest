@@ -80,7 +80,7 @@ void get_floppy_status(unsigned int *r, unsigned int *w, unsigned int *track, un
 
 void floppy_interrupt(uint32_t in) {
   static unsigned int oldaddr=2000;
-  static uint32_t oldin=0;
+  //static uint32_t oldin=0;
 
   static struct {
     uint8_t *p;
@@ -95,12 +95,12 @@ void floppy_interrupt(uint32_t in) {
   floppy_drive = in>>12&1;
 
   if (floppy_addr==oldaddr) return;
-  unsigned int newaddr = oldaddr==390?0:(oldaddr+1);
-  if (oldaddr<=390 && floppy_addr!=newaddr) {
-    printf("missed addr, expected=%u, got=%u, oldin=%08x in=%08x\n",newaddr,floppy_addr,oldin,in);
-    fflush(stdout);
-  }
-  oldin = in;
+  //unsigned int newaddr = oldaddr==390?0:(oldaddr+1);
+  //if (oldaddr<=390 && floppy_addr!=newaddr) {
+  //  printf("missed addr, expected=%u, got=%u, oldin=%08x in=%08x\n",newaddr,floppy_addr,oldin,in);
+  //  fflush(stdout);
+  //}
+  //oldin = in;
   oldaddr = floppy_addr;
 
   // start a critical section so the image is not changed during access
@@ -130,7 +130,7 @@ void floppy_interrupt(uint32_t in) {
     }
   }
   pthread_mutex_unlock(&mutex);
-  oldin = in;
+  //oldin = in;
 }
 
 // unmask interrupt
