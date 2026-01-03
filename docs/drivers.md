@@ -30,8 +30,7 @@ Pre-built binaries for zkbd can be found in the downloadable zeST archive, under
 
 ## GEMDOS drive stub
 
-The GEMDOS drive stub installs and lets the Linux host manage the [GEMDOS drive].
-It is available in two forms:
+The GEMDOS drive stub program `gdstub.prg` is required when you are using the GEMDOS drive not as the boot device.
+In that case, place the program in the `AUTO` folder of the actual boot device.
 
- - Loaded from the bootsector when booting on the drive;
- - Explicitly executed from another boot drive's `AUTO` folder. The program can be found on the zeST archive as the `drivers/gdstub.prg` program file.
+This program is not necessary when booting on the GEMDOS drive.

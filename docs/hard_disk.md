@@ -79,6 +79,7 @@ The GEMDOS drive allows you to define a directory in the [Linux system](/doc/lin
 whose contained files will be present as a disk drive on the Atari system.
 This way, files are directly accessible both on Linux and the Atari, making
 file exchange easier between systems, allowing the use of networked drives, etc.
+It is an alternative to using disk image files.
 
 The GEMDOS drive is materialised as a specific ACSI drive unit, that will use
 the first ACSI ID that is not assigned to a disk image file.
@@ -86,6 +87,22 @@ the first ACSI ID that is not assigned to a disk image file.
 It requires a specific driver to work, that is called the [GEMDOS drive stub](/doc/drivers#gemdos-drive-stub).
 This driver is automatically executed when the GEMDOS drive is set as the boot drive,
 or can be placed on your boot drive's `AUTO` folder.
+
+### Limitations
+
+The GEMDOS drive requires a system ROM that implements a version of GEMDOS superior
+or equal to 0.15.
+This excludes TOS versions 1.00 and 1.02.
+The driver will crash on these versions.
+It will work fine on TOS versions 1.04 and 2.06.
+
+EmuTOS is also supported.
+However, on current versions, it does not allow to use the GEMDOS drive as
+the boot device.
+You can still boot on a regular hard disk or floppy image, on which you installed
+zeST's GEMDOS stub program in the `AUTO` folder.
+The GEMDOS drive will be assigned the first unused drive letter following the
+existing installed partitions.
 
 ### Booting on the GEMDOS drive
 
