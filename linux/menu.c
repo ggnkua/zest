@@ -140,7 +140,7 @@ static int settings(void) {
     midi_update_ports();
   }
 
-  if (strcmp(config.rom_file,tmp_rom)) {
+  if (config.rom_file&&strcmp(config.rom_file,tmp_rom)) {
     if (load_rom(config.rom_file)!=0) {
       // in case the ROM could not be loaded, fall back to default ROM
       if (load_rom("/usr/share/zest/rom.img")!=0) return 1;
