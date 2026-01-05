@@ -79,15 +79,8 @@ EOF
 fi
 
 # bluetooth setup
-#mkdir -p $TARGET/etc/bluetooth/var
-#ln -sf /etc/bluetooth/var $TARGET/var/lib/bluetooth
-cat <<EOF > $TARGET/etc/bluetooth/main.conf
-[General]
-Name = zeST
-
-[Policy]
-AutoEnable=true
-EOF
+mkdir -p $TARGET/etc/bluetooth
+cp -a $SRCDIR/setup/extra/bluetooth/* $TARGET/etc/bluetooth
 
 # zeST binary
 cp -a $SRCDIR/linux/zeST $TARGET/usr/bin
