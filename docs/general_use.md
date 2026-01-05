@@ -18,7 +18,7 @@ You may not get enough power for your USB devices (or even, the board may not wo
 
 By default, the ST starts without any floppy inserted.
 
-You can get access to the setup menu by pressing either of the **Scroll Lock** or **Page Up** keys, or using the **Meta+Enter** key combo.
+You can get access to the setup menu by pressing either of the **Scroll Lock**, **Page Up** or **Search** (magnifying glass) keys, or using the **Meta+Enter** key combo.
 From there, you can access different functions including rebooting the ST, selecting a floppy disk image, choosing the RAM size.
 
 All dialogs use a system of lists: lists of settings, files, or MIDI devices.
@@ -74,4 +74,3 @@ When joystick emulation is on, the arrow keys will act as the joystick direction
 ## Volume control
 
 The multimedia keys **Volume Up**, **Volume Down** and **Mute** allow you to control the sound level.
-

@@ -266,6 +266,7 @@ void * thread_ikbd(void * arg) {
               break;
             case KEY_PAGEUP:
             case KEY_SCROLLLOCK:
+            case KEY_SEARCH:
             case BTN_START:
               menu();
               break;
