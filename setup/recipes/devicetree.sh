@@ -29,7 +29,7 @@ hsi set_repo_path src/device-tree-xlnx
 hsi create_sw_design device-tree -os device_tree -proc ps7_cortexa9_0
 hsi generate_target -dir $target/dt
 EOF
-    $XILINX_PATH/Vitis/$XILINX_VERSION/bin/xsct $target/devicetree.tcl || exit $?
+    $XILINX_PATH/$XILINX_VERSION/Vitis/bin/xsct $target/devicetree.tcl || exit $?
     rm $target/devicetree.tcl
 fi
 

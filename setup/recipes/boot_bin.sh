@@ -23,7 +23,7 @@ the_ROM_image:
     [load=0x800000]devicetree.dtb
 }
 EOF
-$XILINX_PATH/Vitis/$XILINX_VERSION/bin/bootgen -arch zynq -image boot.bif -o boot.bin || exit $?
+$XILINX_PATH/$XILINX_VERSION/Vitis/bin/bootgen -arch zynq -image boot.bif -o boot.bin || exit $?
 rm boot.bif
 
 # Create the boot file for setting up QSPI on zynqberry and other xc7z010-clg225 based boards
@@ -37,6 +37,6 @@ rm boot.bif
 #    [bootloader]fsbl.elf
 #}
 #EOF
-#    $XILINX_PATH/Vitis/$XILINX_VERSION/bin/bootgen -arch zynq -image boot.bif -o spi_boot.bin || exit $?
+#    $XILINX_PATH/$XILINX_VERSION/Vitis/bin/bootgen -arch zynq -image boot.bif -o spi_boot.bin || exit $?
 #    rm boot.bif
 #fi

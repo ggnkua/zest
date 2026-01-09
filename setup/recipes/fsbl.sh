@@ -2,7 +2,7 @@
 
 ZEST_PATH=${PWD%/*}
 ZEST_SETUP=${PWD}
-VITIS=$XILINX_PATH/Vitis/$XILINX_VERSION
+VITIS=$XILINX_PATH/$XILINX_VERSION/Vitis
 
 if [ $# -ne 1 ] ; then
     echo "usage: $0 target"

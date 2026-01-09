@@ -4,7 +4,7 @@
 ZEST_PATH=${PWD%/*}
 ZEST_SETUP=${PWD}
 
-VIVADO=${XILINX_PATH}/Vivado/${XILINX_VERSION}/bin/vivado
+VIVADO=${XILINX_PATH}/${XILINX_VERSION}/Vivado/bin/vivado
 
 if [ $# -ne 1 ] ; then
     echo "usage: $0 target"
