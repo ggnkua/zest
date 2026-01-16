@@ -116,6 +116,7 @@ Supposing the key file name is `id_rsa.pub`, use the command:
     # mkdir -p .ssh
     # chmod 700 .ssh
     # mv id_rsa.pub .ssh/authorized_keys
+    # chmod 600 .ssh/authorized_keys
 
 Now the board is accessible as root using that public key.
 
