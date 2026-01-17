@@ -210,14 +210,17 @@ void init_pcg(void)
   pcg32_srandom_r(&random_for_disk_selection, time(NULL), (intptr_t)&random_for_disk_selection);
 }
 
+int jukebox_trigger_next_image=0;
+
 void * thread_jukebox(void * arg) {
   uint64_t jukebox_timeout = 0;
   while (thr_end == 0) {
     uint64_t time = gettime();
     usleep(1000);
     if (msg_pause==0 && config.jukebox_enabled && config.jukebox_path /*&& !file_selector_running*/) {
-      if (time >= jukebox_timeout)
+      if (time >= jukebox_timeout||jukebox_trigger_next_image)
       {
+        jukebox_trigger_next_image=0;
         // Read directory
         struct dirent **namelist;
         int n = scandir(config.jukebox_path,&namelist,&filter_flopimg,alphasort);

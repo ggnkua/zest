@@ -158,6 +158,7 @@ static int settings(void) {
 
 static int tools(void) {
   int quit = 0;
+  int e_nextimage=0;
   while (!quit) {
     ListView *lv = lv_new(XPOS,YPOS,WIDTH,HEIGHT,"zeST tools",menu_palette);
     int entry_height = lv_entry_height();
@@ -175,12 +176,17 @@ static int tools(void) {
       "UTC+1","UTC+2","UTC+3","UTC+4","UTC+5","UTC+6","UTC+7","UTC+8","UTC+9","UTC+10","UTC+11","UTC+12");
     int e_jbmode = lv_add_choice(lv,"Jukebox mode",&config.jukebox_enabled,2,"no","yes");
     if (config.jukebox_enabled) {
+      e_nextimage=lv_add_action(lv,"Jukebox: next image");
       lv_add_file(lv,"Jukebox directory",&config.jukebox_path,LV_FILE_DIRECTORY,filter_directory);
     }
     lv_choice_set_dynamic(lv,e_jbmode,1);
     int e = lv_run(lv);
     if (e==e_jbmode) {
       // do nothing, just have the menu refreshed
+    } else if (e==e_nextimage) {
+      jukebox_trigger_next_image=1;
+      lv_delete(lv);
+      return 1;
     } else {
       quit = 1;
     }
@@ -292,7 +298,10 @@ void menu(void) {
       }
     }
     else if (e==e_tools) {
-      tools();
+      int r=tools();
+      if (r) {
+        quit=1;
+      }
     }
     else if (e==e_save_cfg) {
       config_save();
