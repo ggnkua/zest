@@ -165,6 +165,7 @@ static int settings(void) {
 
 static int tools(void) {
   int quit = 0;
+  int e_nextimage=0;
   char jukebox_timeout[8];
   const char *config_file = strdup(config_get_file());
   char new_config[32];
@@ -190,6 +191,7 @@ static int tools(void) {
     int e_jbmode = lv_add_choice(lv,"Jukebox mode",&config.jukebox_enabled,2,"off","on");
     int e_timeout;
     if (config.jukebox_enabled) {
+      e_nextimage=lv_add_action(lv,"Jukebox: next image");
       lv_add_file(lv,"Jukebox directory",&config.jukebox_path,LV_FILE_DIRECTORY,filter_directory);
       sprintf(jukebox_timeout,"%d",config.jukebox_timeout_duration);
       e_timeout = lv_add_editable(lv,"Jukebox timeout (s)",sizeof(jukebox_timeout)-1,jukebox_timeout,5);
@@ -228,6 +230,10 @@ static int tools(void) {
       config_save();
       config_file = strdup(new_path);
       new_config[0] = 0;
+    } else if (e==e_nextimage) {
+      jukebox_trigger_next_image=1;
+      lv_delete(lv);
+      return 1;
     } else {
       if (config.jukebox_enabled) {
         int timeout = atoi(jukebox_timeout);
@@ -344,7 +350,10 @@ void menu(void) {
       }
     }
     else if (e==e_tools) {
-      tools();
+      int r=tools();
+      if (r) {
+        quit=1;
+      }
     }
     else if (e==e_save_cfg) {
       config_save();

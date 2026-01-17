@@ -149,6 +149,11 @@ void * thread_ikbd(void * arg) {
                   menu();
                 }
                 break;
+              case KEY_N:
+                if (evvalue == 1) {
+                   jukebox_trigger_next_image=1;
+                }
+                break;
             }
             break;
           }
