@@ -171,6 +171,7 @@ static int tools(void) {
   char new_config[32];
   new_config[0] = 0;
 
+  int e_jbmode=0;
   while (!quit) {
     ListView *lv = lv_new(XPOS,YPOS,WIDTH,HEIGHT,"zeST tools");
     int entry_height = lv_entry_height();
@@ -190,7 +191,9 @@ static int tools(void) {
 
     int e_jbmode = lv_add_choice(lv,"Jukebox mode",&config.jukebox_enabled,2,"off","on");
     int e_timeout;
+    int e_jbenabled = lv_add_choice(lv,"Jukebox active",&config.jukebox_enabled,2,"no","yes");
     if (config.jukebox_enabled) {
+      e_jbmode=lv_add_choice(lv,"Jukebox mode",&config.jukebox_mode,2,"random","alphabetical");
       e_nextimage=lv_add_action(lv,"Jukebox: next image");
       lv_add_file(lv,"Jukebox directory",&config.jukebox_path,LV_FILE_DIRECTORY,filter_directory);
       sprintf(jukebox_timeout,"%d",config.jukebox_timeout_duration);
@@ -206,7 +209,7 @@ static int tools(void) {
     lv_entry_set_dynamic(lv,e_newconf,1);
 
     int e = lv_run(lv);
-    if (e==e_jbmode) {
+    if (e==e_jbenabled) {
       // do nothing, just have the menu refreshed
     } else if (e_timeout!=-1&&e==e_timeout) {
     } else if (e==e_config) {
@@ -230,6 +233,11 @@ static int tools(void) {
       config_save();
       config_file = strdup(new_path);
       new_config[0] = 0;
+    } else if (e==e_jbmode) {
+      if (config.jukebox_mode==1) {
+        // Reset index if alphabetical mode is on
+        jukebox_current_alphabetical_image=0;
+      }
     } else if (e==e_nextimage) {
       jukebox_trigger_next_image=1;
       lv_delete(lv);

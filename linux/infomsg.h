@@ -33,5 +33,6 @@ void vol_down(void);
 void vol_up(void);
 
 extern int jukebox_trigger_next_image;
+extern int jukebox_current_alphabetical_image;
 
 #endif
