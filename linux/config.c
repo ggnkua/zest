@@ -137,6 +137,13 @@ static int handler(void* user, const char* section, const char* name, const char
     if (value) pconfig->jukebox_enabled = truefalse(value);
   } else if (MATCH("jukebox","path")) {
     if (value) pconfig->jukebox_path = strdup(value);
+  } else if (MATCH("jukebox", "mode")) {
+    int jm = atoi(value);
+    if (jm<0 || jm>1) {
+      printf("invalid jukebox mode value `%d`\n",jm);
+    } else {
+      pconfig->jukebox_mode=jm;
+    }
   } else if (MATCH("jukebox","timeout")) {
     int t = atoi(value);
     if (t < 1)
@@ -178,6 +185,7 @@ void config_init(void) {
   config.midi_out = NULL;
   config.jukebox_enabled = 0;
   config.jukebox_timeout_duration = 90;
+  config.jukebox_mode = 0;
   config.jukebox_path = NULL;
 }
 
@@ -256,6 +264,7 @@ void config_save(void) {
   if (config.jukebox_enabled) {
     fprintf(fd,"\n[jukebox]\n");
     fprintf(fd,"enabled = %s\n",config.jukebox_enabled?"true":"false");
+    fprintf(fd,"mode= %d\n",config.jukebox_mode);
     fprintf(fd,"path = %s\n",config.jukebox_path?config.jukebox_path:"");
     fprintf(fd,"timeout = %d\n",(int)(config.jukebox_timeout_duration));
   }

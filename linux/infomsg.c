@@ -211,6 +211,7 @@ void init_pcg(void)
 }
 
 int jukebox_trigger_next_image=0;
+int jukebox_current_alphabetical_image=0;
 
 void * thread_jukebox(void * arg) {
   uint64_t jukebox_timeout = 0;
@@ -229,20 +230,28 @@ void * thread_jukebox(void * arg) {
           //infomsg_display("Error while reading jukebox directory. Jukebox off.");
           jukebox_timeout = time + 1000000;
         } else {
-          // Select random image
+          // Select image
           if (!random_for_disk_selection.state)
           {
             init_pcg();
           }
           int selected_image;
           do {
-            selected_image = pcg32_random_r(&random_for_disk_selection) % n;
+            if (config.jukebox_mode==0) {
+              // Random
+              selected_image = pcg32_random_r(&random_for_disk_selection) % n;
+            } else {
+              // Alphabetical, in order
+              jukebox_current_alphabetical_image=(jukebox_current_alphabetical_image+1)%n;
+              selected_image = jukebox_current_alphabetical_image;
+            }
           } while (namelist[selected_image]->d_type==DT_DIR); // Avoid directories
           // Construct image filename
           char *selected_item = namelist[selected_image]->d_name;
           char new_disk_image_name[PATH_MAX];
           strcpy(new_disk_image_name, config.jukebox_path);
           strcat(new_disk_image_name, selected_item);
+          printf("booting %s\n",new_disk_image_name);
           // Free item list
           int i;
           for (i=0; i<n; ++i) {
