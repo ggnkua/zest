@@ -92,6 +92,8 @@
 #define FA_DIR      0x10                /* Include subdirectories */
 #define FA_ARCHIVE  0x20                /* Include files with archive bit set */
 
+#define FD_OFFSET   0x7a00              /* Offset from Linux file descriptor to GEMDOS handle */
+
 /* debugging messages */
 //#define DEBUG
 #ifdef DEBUG
@@ -824,7 +826,7 @@ static void Fsetdta(unsigned int addr) {
 
 
 // on Fopen, open the corresponding file and return a custom handle
-// that equals to 0x7a00 + host handle
+// that equals to FD_OFFSET + host handle
 static void Fopen(unsigned int pname, unsigned int mode) {
   char path_gemdos[1024];
   char path_host[1024];
@@ -861,7 +863,7 @@ static void Fopen(unsigned int pname, unsigned int mode) {
     return;
   }
   // return our custom handle
-  gemdos_return(0x7a00+handle);
+  gemdos_return(FD_OFFSET+handle);
 }
 
 static void Fcreate(unsigned int pname, unsigned int attr) {
@@ -894,18 +896,18 @@ static void Fcreate(unsigned int pname, unsigned int attr) {
     return;
   }
   // return our custom handle
-  gemdos_return(0x7a00+handle);
+  gemdos_return(FD_OFFSET+handle);
 }
 
 static void Fclose(int handle) {
   DPRINTF("Fclose(%d)\n",handle);
-  if (handle<0x7a00) {
+  if (handle<FD_OFFSET) {
     // not locally managed file
     no_action_required();
     return;
   }
   action_required();
-  int retval = close(handle-0x7a00);
+  int retval = close(handle-FD_OFFSET);
   if (retval==0) {
     gemdos_return(0);
     return;
@@ -915,7 +917,7 @@ static void Fclose(int handle) {
 
 static void Fread(int handle, unsigned int length, unsigned int addr) {
   DPRINTF("Fread(%d,%d,%#x)\n",handle,length,addr);
-  if (handle<0x7a00) {
+  if (handle<FD_OFFSET) {
     // not locally managed file
     no_action_required();
     return;
@@ -929,7 +931,7 @@ static void Fread(int handle, unsigned int length, unsigned int addr) {
   while (length>0) {
     uint8_t *pbuf = buf+512*DMABUFSZ*buf_id;
     unsigned int n = length<blksz?length:blksz;
-    int rdb = read(handle-0x7a00,pbuf+8,n);
+    int rdb = read(handle-FD_OFFSET,pbuf+8,n);
     if (rdb==0) {
       // end of file
       break;
@@ -954,7 +956,7 @@ static void Fread(int handle, unsigned int length, unsigned int addr) {
 
 static void Fwrite(int handle, unsigned int length, unsigned int addr) {
   DPRINTF("Fwrite(%d,%d,%#x)\n",handle,length,addr);
-  if (handle<0x7a00) {
+  if (handle<FD_OFFSET) {
     // not locally managed file
     no_action_required();
     return;
@@ -967,7 +969,7 @@ static void Fwrite(int handle, unsigned int length, unsigned int addr) {
   while (length>0) {
     unsigned int n = length<sizeof buf?length:sizeof buf;
     gemdos_read_memory(buf,addr,n);
-    int wrb = write(handle-0x7a00,buf,n);
+    int wrb = write(handle-FD_OFFSET,buf,n);
     if (wrb==-1) {
       gemdos_return(gemdos_error_code());
       return;
@@ -1012,7 +1014,7 @@ static void Fdelete(unsigned int pname) {
 
 static void Fseek(int offset, int handle, int mode) {
   DPRINTF("Fseek(%d,%d,%d)\n",offset,handle,mode);
-  if (handle<0x7a00) {
+  if (handle<FD_OFFSET) {
     // not locally managed file
     no_action_required();
     return;
@@ -1026,7 +1028,7 @@ static void Fseek(int offset, int handle, int mode) {
     gemdos_return(-36);   // EACCDN
     return;
   }
-  off_t off = lseek(handle-0x7a00,offset,whence);
+  off_t off = lseek(handle-FD_OFFSET,offset,whence);
   if (off==-1) {
     gemdos_return(gemdos_error_code());
     return;
@@ -1191,7 +1193,7 @@ static void Frename(unsigned int poldname,unsigned int pnewname) {
 
 static void Fdatime(unsigned int timeptr, int handle, int wflag) {
   DPRINTF("Fdatime(%#x,%d,%d)\n",timeptr,handle,wflag);
-  if (handle<0x7a00) {
+  if (handle<FD_OFFSET) {
     // not locally managed file
     no_action_required();
     return;
@@ -1201,7 +1203,7 @@ static void Fdatime(unsigned int timeptr, int handle, int wflag) {
   if (wflag==0) {
     struct stat st;
     unsigned int time,date;
-    fstat(handle-0x7a00,&st);
+    fstat(handle-FD_OFFSET,&st);
     u2d_time(st.st_mtim.tv_sec,&time,&date);
     write_u16(buf,time);
     write_u16(buf+2,date);
@@ -1213,7 +1215,7 @@ static void Fdatime(unsigned int timeptr, int handle, int wflag) {
     ts[0].tv_sec = d2u_time(read_u16(buf),read_u16(buf+2));
     ts[0].tv_nsec = 0;
     ts[1] = ts[0];
-    futimens(handle-0x7a00,ts);
+    futimens(handle-FD_OFFSET,ts);
   }
   gemdos_return(0);
 }
