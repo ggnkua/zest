@@ -36,6 +36,8 @@
 
 #include "sil9022a.h"
 
+#define LOCKFILE "/tmp/zest.lock"
+
 /* from floppy.c */
 void * thread_floppy(void * arg);
 void * thread_jukebox(void * arg);
@@ -284,6 +286,16 @@ int usage(const char *progname) {
 int main(int argc, char **argv) {
   int has_sil;
 
+  int lock_fd = open(LOCKFILE,O_CREAT|O_EXCL|O_RDWR,0644);
+  if (lock_fd==-1) {
+    if (errno==EEXIST) {
+      printf("Another zeST instance is already running\n");
+      return 1;
+    }
+    perror("open");
+    return 1;
+  }
+
   config_init();
   config_set_file("/sdcard/zest.cfg");
 
@@ -393,6 +405,8 @@ int main(int argc, char **argv) {
   if (has_sil) {
     hdmi_stop();
   }
+  close(lock_fd);
+  unlink(LOCKFILE);
 
   return 0;
 }
