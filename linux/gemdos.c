@@ -92,7 +92,7 @@
 #define FA_DIR      0x10                /* Include subdirectories */
 #define FA_ARCHIVE  0x20                /* Include files with archive bit set */
 
-#define FD_OFFSET   0x7a00              /* Offset from Linux file descriptor to GEMDOS handle */
+#define FD_OFFSET   0x40                /* Offset from Linux file descriptor to GEMDOS handle */
 
 /* debugging messages */
 //#define DEBUG
