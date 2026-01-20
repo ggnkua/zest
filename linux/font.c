@@ -466,57 +466,58 @@ static int font_render_glyph(const Font *fnt, void *bitmap, int raster_count, in
   const struct metrics *m = &fnt->metrics[glyph];
   // printf("metrics = "); print_metrics(m);
 
-  int y;
-  int glyph_height = fnt->accelerators.font_ascent+m->character_descent;
-  int ymax = height<glyph_height ? height : glyph_height;
   int c_width = m->right_side_bearing-m->left_sided_bearing;
-  int y0 = 0;
-  if (fnt->accelerators.constant_metrics==0) {
-    y0 = fnt->accelerators.font_ascent-m->character_ascent;
-    if (y0<0) {
-      src -= y0<<glyph_pad;
-      y0 = 0;
-    }
-  }
-  int x_shift = 0;
-  if (x<0) {
-    x_shift = -x;
-    x = 0;
-  }
-  bitmap += (raster_count*y0 + x/RASTER_NBIT)*raster_pad*RASTER_SIZE;
-  int rem_f0 = c_width>width-x ? width-x : c_width;
-  for (y=y0;y<ymax;++y) {
-    uint32_t fpix = 0;      // source pixels
-    uint32_t pix = 0;       // next raster of pixels to be drawn
-    int rem_r = RASTER_NBIT-(x&(RASTER_NBIT-1));  // remaining pixels to be written in current raster
-    int rem_f = rem_f0;
-    int nfp = 0;            // number of pixels in fpix
-    int i = 0;
-    void *xbmp = bitmap;
-    while (rem_f>0) {
-      if (nfp==0) {
-        fpix = (bitmsb?src[i]:rev[src[i]])<<(SREG_NBIT-8);
-        ++i;
-        nfp = rem_f>8 ? 8 : rem_f;
-      }
-      pix |= fpix>>(SREG_NBIT-rem_r);
-      int nb = rem_r<nfp ? rem_r : nfp;
-      nfp -= nb;
-      rem_r -= nb;
-      rem_f -= nb;
-      fpix <<= nb;
-      if (rem_r==0) {
-        write_bitmap(xbmp,pix);
-        xbmp += raster_pad*RASTER_SIZE;
-        pix = 0;
-        rem_r = RASTER_NBIT;
+  if (x+c_width>0) {
+    int y;
+    int glyph_height = fnt->accelerators.font_ascent+m->character_descent;
+    int ymax = height<glyph_height ? height : glyph_height;
+    int y0 = 0;
+    if (fnt->accelerators.constant_metrics==0) {
+      y0 = fnt->accelerators.font_ascent-m->character_ascent;
+      if (y0<0) {
+        src -= y0<<glyph_pad;
+        y0 = 0;
       }
     }
-    if (pix) write_bitmap(xbmp,pix);
-    src += 1<<glyph_pad;
-    bitmap += raster_count*raster_pad*RASTER_SIZE;
+    bitmap += (raster_count*y0 + (x>0?x:0)/RASTER_NBIT)*raster_pad*RASTER_SIZE;
+    int rem_f0 = c_width>width-x ? width-x : c_width;
+    for (y=y0;y<ymax;++y) {
+      uint32_t fpix = 0;      // source pixels
+      uint32_t pix = 0;       // next raster of pixels to be drawn
+      int rem_r = RASTER_NBIT-((x+RASTER_NBIT)&(RASTER_NBIT-1));  // remaining pixels to be written in current raster
+      int rem_f = rem_f0;
+      int nfp = 0;            // number of pixels in fpix
+      int i = 0;
+      int xc = x;
+      void *xbmp = bitmap;
+      while (rem_f>0) {
+        if (nfp==0) {
+          fpix = (bitmsb?src[i]:rev[src[i]])<<(SREG_NBIT-8);
+          ++i;
+          nfp = rem_f>8 ? 8 : rem_f;
+        }
+        pix |= fpix>>(SREG_NBIT-rem_r);
+        int nb = rem_r<nfp ? rem_r : nfp;
+        nfp -= nb;
+        rem_r -= nb;
+        rem_f -= nb;
+        fpix <<= nb;
+        if (rem_r==0) {
+          if (xc>=0) {
+            write_bitmap(xbmp,pix);
+            xbmp += raster_pad*RASTER_SIZE;
+          }
+          pix = 0;
+          rem_r = RASTER_NBIT;
+        }
+        xc += RASTER_NBIT;
+      }
+      if (pix) write_bitmap(xbmp,pix);
+      src += 1<<glyph_pad;
+      bitmap += raster_count*raster_pad*RASTER_SIZE;
+    }
   }
-  return m->character_width - m->left_sided_bearing + x_shift;
+  return m->character_width - m->left_sided_bearing;
 }
 
 // return unicode value of next character from UTF-8-encoded string
@@ -560,16 +561,22 @@ void font_render_text(const Font *fnt, void *bitmap, int raster_count, int raste
   }
 }
 
+// get text width of character
+int font_char_width(const Font *fnt, int c) {
+  int glyph = glyph_id(fnt,c);
+  if (glyph>=0) {
+    const struct metrics *m = &fnt->metrics[glyph];
+    return m->character_width - m->left_sided_bearing;
+  }
+  return 0;
+}
+
 // get text width in pixels of UTF-8-encoded string
 int font_text_width(const Font *fnt, const char *txt) {
   int w = 0;
   int c;
   while ((c=next_char(&txt))>0) {
-    int glyph = glyph_id(fnt,c);
-    if (glyph>0) {
-      const struct metrics *m = &fnt->metrics[glyph];
-      w += m->character_width - m->left_sided_bearing;
-    }
+    w += font_char_width(fnt,c);
   }
   return w;
 }

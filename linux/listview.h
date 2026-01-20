@@ -27,21 +27,29 @@ typedef struct listview ListView;
 #define LV_FILE_EJECTABLE 0x0001
 #define LV_FILE_DIRECTORY 0x0002
 
+extern const uint32_t lv_palette[4];
+
 // must be called once before first call to lv_new
 void lv_init(const char *font_file_name);
 
 // return entry height in pixels
 int lv_entry_height(void);
 
-ListView *lv_new(int xpos, int ypos, int width, int height, const char *header, const uint32_t *palette);
+ListView *lv_new(int xpos, int ypos, int width, int height, const char *header);
 
 void lv_set_colour_change(ListView *lv, int line_no, int col_no, uint32_t rgb);
 
 // add entry with exit action
 int lv_add_action(ListView *lv, const char *title);
 
-// add entry with a list of choices
+// add entry with a list of choices (vararg mode)
 int lv_add_choice(ListView *lv, const char *title, int *pselect, int count, ...);
+
+// add entry with a list of choices (array mode)
+int lv_add_choice_array(ListView *lv, const char *title, int *pselect, int count, const char **entries);
+
+// add entry with a list of choices
+int lv_add_keymap_choice(ListView *lv);
 
 // sets if choice is dynamic (menu exits on every change)
 void lv_choice_set_dynamic(ListView *v, int entry, int dynamic);
@@ -53,6 +61,8 @@ void lv_choice_set_dynamic(ListView *v, int entry, int dynamic);
 int lv_add_file(ListView *lv, const char *title, const char **pfilename, int flags, int (*filter)(const struct dirent *));
 
 int lv_add_midi(ListView *lv, const char *title, const char **pportname);
+
+int lv_add_editable(ListView *lv, const char *title, int capacity, char *text);
 
 void lv_delete(ListView *lv);
 

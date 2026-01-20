@@ -52,7 +52,8 @@ floppy_img.o: floppy_img.c floppy_img.h
 
 ikbd.o: ikbd.c input.h menu.h config.h infomsg.h setup.h
 
-listview.o: listview.c listview.h input.h osd.h font.h misc.h
+listview.o: listview.c listview.h input.h osd.h font.h misc.h config.h \
+            keymap_bepo.c keymap_de.c keymap_dk.c keymap_es.c keymap_fr.c keymap_gb.c keymap_nl.c keymap_no.c keymap_pl.c keymap_se.c keymap_us.c
 
 misc.o: misc.c misc.h
 

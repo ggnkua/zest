@@ -44,6 +44,7 @@ typedef struct {
   int scan_doubler_mode;            // scan doubler mode (0-1)
   const char *rom_file;             // ROM file, full path
   int timezone;                     // local timezone (-12..12)
+  int keymap_id;                    // keymap id
 
   // floppy
   const char *floppy_a;             // A: floppy image file, full path

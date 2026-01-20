@@ -28,22 +28,57 @@
 #include "osd.h"
 #include "font.h"
 #include "input.h"
+#include "config.h"
 #include "misc.h"
+
+#include "dead_combos.c"
+#include "keymap_bepo.c"
+#include "keymap_de.c"
+#include "keymap_dk.c"
+#include "keymap_es.c"
+#include "keymap_fr.c"
+#include "keymap_gb.c"
+#include "keymap_nl.c"
+#include "keymap_no.c"
+#include "keymap_pl.c"
+#include "keymap_se.c"
+#include "keymap_us.c"
 
 // entry types
 #define LV_ENTRY_ACTION 1
 #define LV_ENTRY_CHOICE 2
 #define LV_ENTRY_FILE 3
 #define LV_ENTRY_MIDI 4
+#define LV_ENTRY_EDITABLE 5
 
 // width of choice field in 16-pixel rasters
 #define N_RASTER_CHOICE 4
 #define N_RASTER_FILE 6
 #define N_RASTER_MIDI 8
+#define N_RASTER_EDITABLE 7
 
 #define BUF_SIZE 256
 
+struct {
+  const char *title;
+  const int (*map)[128];
+} keymaps[] = {
+  {"Danish",keymap_dk},
+  {"Dutch",keymap_nl},
+  {"English (UK)",keymap_gb},
+  {"English (US)",keymap_us},
+  {"French",keymap_fr},
+  {"Fr. (bépo)",keymap_bepo},
+  {"German",keymap_de},
+  {"Norwegian",keymap_no},
+  {"Polish",keymap_pl},
+  {"Spanish",keymap_es},
+  {"Swedish",keymap_se},
+};
+
 Font *lv_font;
+
+const uint32_t lv_palette[4] = {0x000040,0xc0c000,0x2020c0,0xf0f060};
 
 extern volatile int thr_end;
 
@@ -81,6 +116,16 @@ struct lv_midi {
   const char *devname;
 };
 
+struct lv_editable {
+  struct lv_entry e;
+  int capacity;
+  int nc;
+  int cur_pos;              // cursor position in string
+  int cur_x;                // cursor position in pixels
+  int shift;                // number of pixels of textfield shifting
+  char *text;
+};
+
 struct listview {
   int xpos;
   int ypos;
@@ -90,12 +135,101 @@ struct listview {
   int offset;               // first entry to display
   int align_left;
   const char *header;
-  const uint32_t *palette;
   uint32_t *colour_change;
   int n_entries;
   int capacity;
   struct lv_entry **entries;
 };
+
+// get character from pressed keys
+static int read_character(int keycode, int pressed) {
+  static int shiftstate = 0;
+  static int dead = 0;
+  if (keycode==KEY_LEFTSHIFT||keycode==KEY_RIGHTSHIFT) {
+    shiftstate = pressed?shiftstate|1:shiftstate&~1;
+  }
+  else if (keycode==KEY_CAPSLOCK && pressed) {
+    shiftstate ^= 2;
+  }
+  else if (keycode==KEY_RIGHTALT) {
+    shiftstate = pressed?shiftstate|4:shiftstate&~4;
+  }
+  else if (pressed) {
+    int val = keymaps[config.keymap_id].map[shiftstate][keycode];
+    if (dead) {
+      int (*p)[2] = dead_combos;
+      while ((*p)[0]!=dead) p=p+(*p)[1]+1;
+      int n = (*p)[1];
+      int i;
+      for (i=0;i<n;++i) {
+        if ((*p)[0]==val) break;
+        ++p;
+      }
+      val = i<n?(*p)[1]:0;
+      dead = 0;
+    }
+    if (val<0) {
+      dead = -val;
+      return 0;
+    }
+    return val;
+  }
+  return 0;
+}
+
+// read the next multi-byte character in an UTF-8-formatted string
+static int decode_utf8(const char **text) {
+  int c = 0;
+	const uint8_t *p = (const uint8_t *)*text;
+  for (;;) {
+    c = *p++;
+    if (c>=0x80) {
+      int nbytes = 0;
+      if (c<0xc0) continue;
+      if (c<0xe0) {
+        c = c&0x1f;
+        nbytes = 1;
+      } else if (c<0xf0) {
+        c = c&0xf;
+        nbytes = 2;
+      } else if (c<0xf8) {
+        c = c&0x7;
+        nbytes = 3;
+      } else continue;
+      int i;
+      for (i=0;i<nbytes;++i) {
+        int xc = *p++;
+        if (xc<0x80||xc>=0xC0) break;
+        c = c<<6 | (xc&0x3f);
+      }
+      if (i<nbytes) continue;
+    }
+    break;
+  }
+  *text = (const char*)p;
+  return c;
+}
+
+static int encode_utf8(char *buf, unsigned int c) {
+  char *p = buf;
+  if (c<0x80) {
+    *p++ = c;
+  } else if (c<0x800) {
+    *p++ = 0xc0 | c>>6;
+    *p++ = 0x80 | (c&0x3f);
+  } else if (c<0x10000) {
+    *p++ = 0xe0 | c>>12;
+    *p++ = 0x80 | (c>>6&0x3f);
+    *p++ = 0x80 | (c&0x3f);
+  } else if (c<0x200000) {
+    *p++ = 0xf0 | c>>18;
+    *p++ = 0x80 | (c>>12&0x3f);
+    *p++ = 0x80 | (c>>6&0x3f);
+    *p++ = 0x80 | (c&0x3f);
+  }
+  *p = 0;
+  return p-buf;
+}
 
 // Read a single line from a file into buf; returns 1 if success, 0 if fail
 static int read_sysfs_str(const char *path, char *buf) {
@@ -201,7 +335,7 @@ int lv_entry_height(void) {
   return font_get_height(lv_font);
 }
 
-ListView *lv_new(int xpos, int ypos, int width, int height, const char *header, const uint32_t *palette) {
+ListView *lv_new(int xpos, int ypos, int width, int height, const char *header) {
   ListView *lv = malloc(sizeof(ListView));
   memset(lv,0,sizeof(ListView));
   lv->xpos = xpos;
@@ -209,7 +343,6 @@ ListView *lv_new(int xpos, int ypos, int width, int height, const char *header, 
   lv->width = width&-16;
   lv->height = height;
   lv->header = header;
-  lv->palette = palette;
   lv->colour_change = malloc(height*sizeof(uint32_t));
   memset(lv->colour_change,-1,height*sizeof(uint32_t));
   return lv;
@@ -256,7 +389,7 @@ int lv_add_action(ListView *lv, const char *title) {
   return add_entry(lv,LV_ENTRY_ACTION,title,(struct lv_entry*)a);
 }
 
-// add entry with a list of choices
+// add entry with a list of choices (vararg mode)
 int lv_add_choice(ListView *lv, const char *title, int *pselect, int count, ...) {
   struct lv_choice *ch = malloc(sizeof(struct lv_choice));
   ch->n_choices = count;
@@ -274,6 +407,37 @@ int lv_add_choice(ListView *lv, const char *title, int *pselect, int count, ...)
   return add_entry(lv,LV_ENTRY_CHOICE,title,(struct lv_entry*)ch);
 }
 
+// add entry with a list of choices (array mode)
+int lv_add_choice_array(ListView *lv, const char *title, int *pselect, int count, const char **entries) {
+  struct lv_choice *ch = malloc(sizeof(struct lv_choice));
+  ch->n_choices = count;
+  ch->selected = pselect;
+  ch->entries = malloc(count*sizeof(const char*));
+  ch->dynamic = 0;
+
+  int i;
+  for (i=0;i<count;++i) {
+    ch->entries[i] = entries[i];
+  }
+  return add_entry(lv,LV_ENTRY_CHOICE,title,(struct lv_entry*)ch);
+}
+
+// add entry with a list of choices
+int lv_add_keymap_choice(ListView *lv) {
+  struct lv_choice *ch = malloc(sizeof(struct lv_choice));
+  ch->n_choices = sizeof(keymaps)/sizeof(keymaps[0]);
+  ch->selected = &config.keymap_id;
+  ch->entries = malloc(ch->n_choices*sizeof(const char*));
+  ch->dynamic = 0;
+
+  int i;
+  for (i=0;i<ch->n_choices;++i) {
+    ch->entries[i] = keymaps[i].title;
+  }
+  return add_entry(lv,LV_ENTRY_CHOICE,"Keymap",(struct lv_entry*)ch);
+}
+
+// sets if choice is dynamic (menu exits on every change)
 void lv_choice_set_dynamic(ListView *lv, int entry, int dynamic) {
   struct lv_entry *e = lv->entries[entry];
   if (e->type==LV_ENTRY_CHOICE) {
@@ -304,6 +468,30 @@ int lv_add_midi(ListView *lv, const char *title, const char **pportname) {
     e->devname = NULL;
   }
   return add_entry(lv,LV_ENTRY_MIDI,title,(struct lv_entry*)e);
+}
+
+// add entry with an editable text field
+int lv_add_editable(ListView *lv, const char *title, int capacity, char *text) {
+  struct lv_editable *e = malloc(sizeof(struct lv_editable));
+  e->capacity = capacity;
+  e->nc = strlen(text);
+  e->text = text;
+  e->cur_pos = e->nc;
+  e->cur_x = font_text_width(lv_font,text);
+  e->shift = 0;
+  return add_entry(lv,LV_ENTRY_EDITABLE,title,(struct lv_entry*)e);
+}
+
+static int editable_update_shift(struct lv_editable *ed) {
+  if (ed->cur_x < ed->shift) {
+    ed->shift = ed->cur_x;
+    return 1;
+  }
+  if (ed->cur_x-ed->shift >= N_RASTER_EDITABLE*16) {
+    ed->shift = ed->cur_x-N_RASTER_EDITABLE*16+1;
+    return 1;
+  }
+  return 0;
 }
 
 static void display_entry(ListView *lv, int line_no) {
@@ -350,6 +538,12 @@ static void display_entry(ListView *lv, int line_no) {
     font_render_text_centered(lv_font,bitmap+raster_count-N_RASTER_MIDI,raster_count,2,font_height,N_RASTER_MIDI*16,md->devname?buf:portname?portname+4:"<disconnected>");
     break;
   }
+  case LV_ENTRY_EDITABLE: {
+    const struct lv_editable *ed = (struct lv_editable*)e;
+    font_render_text(lv_font,bitmap,raster_count,2,font_height,(raster_count-N_RASTER_EDITABLE)*16,0,e->title);
+    font_render_text(lv_font,bitmap+raster_count-N_RASTER_EDITABLE,raster_count,2,font_height,N_RASTER_EDITABLE*16,-ed->shift,ed->text);
+    break;
+  }
   }
 }
 
@@ -367,7 +561,7 @@ static void highlight(ListView *lv, int line_no, int highlight) {
     }
   } else {
     int i,y;
-    int n_raster = e->type==LV_ENTRY_CHOICE?N_RASTER_CHOICE:e->type==LV_ENTRY_FILE?N_RASTER_FILE:N_RASTER_MIDI;
+    int n_raster = e->type==LV_ENTRY_CHOICE?N_RASTER_CHOICE:e->type==LV_ENTRY_FILE?N_RASTER_FILE:e->type==LV_ENTRY_MIDI?N_RASTER_MIDI:N_RASTER_EDITABLE;
     int beg = raster_count-n_raster;
     uint32_t *bitmap = osd_bitmap+raster_count*font_height*(line_no+1);
     for (y=0;y<font_height;++y) {
@@ -375,6 +569,16 @@ static void highlight(ListView *lv, int line_no, int highlight) {
         *((uint16_t*)(bitmap+i)+1) = mask;
       }
       bitmap += raster_count;
+    }
+    if (e->type==LV_ENTRY_EDITABLE) {
+      const struct lv_editable *ed = (struct lv_editable*)e;
+      int cur_x = ed->cur_x-ed->shift;
+      bitmap = osd_bitmap+raster_count*font_height*(line_no+1)+beg+cur_x/16;
+      unsigned int mask = 0x8000>>(cur_x%16);
+      for (y=0;y<font_height;++y) {
+        *((uint16_t*)bitmap) ^= mask;
+        bitmap += raster_count;
+      }
     }
   }
 }
@@ -435,6 +639,14 @@ static void update_pos(ListView *lv, int new_pos) {
     }
   }
 
+  struct lv_entry *e = lv->entries[new_pos];
+  if (e->type==LV_ENTRY_EDITABLE) {
+    struct lv_editable *ed = (struct lv_editable*)e;
+    if (editable_update_shift(ed)) {
+      memset(osd_bitmap+(new_pos-lv->offset+1)*line_size,0,line_size*sizeof(uint32_t));
+      display_entry(lv,new_pos-lv->offset);
+    }
+  }
   highlight(lv,new_pos-lv->offset,1);
   lv->selected = new_pos;
 }
@@ -471,7 +683,7 @@ static int file_select_compar(const struct dirent **a, const struct dirent **b) 
   return strcasecmp((*a)->d_name,(*b)->d_name);
 }
 
-static const char *file_select(int xpos, int ypos, int width, int height, const char *init_file, int (*filter)(const struct dirent *), const uint32_t *palette, int flags) {
+static const char *file_select(int xpos, int ypos, int width, int height, const char *init_file, int (*filter)(const struct dirent *), int flags) {
   char directory[1024];
   char init_file_name[256];
   init_file_name[0] = 0;
@@ -503,7 +715,7 @@ static const char *file_select(int xpos, int ypos, int width, int height, const 
     struct dirent **namelist;
     int n = scandir(directory,&namelist,filter,file_select_compar);
 
-    ListView *fslv = lv_new(xpos, ypos, width, height, directory, palette);
+    ListView *fslv = lv_new(xpos, ypos, width, height, directory);
     fslv->align_left = 1;
     int entry_height = lv_entry_height();
     uint32_t gradient_header[entry_height];
@@ -512,7 +724,7 @@ static const char *file_select(int xpos, int ypos, int width, int height, const 
     for (i=0;i<entry_height;++i) {
       lv_set_colour_change(fslv,i,1,gradient_header[i]);
     }
-    lv_set_colour_change(fslv,entry_height,1,palette[1]);
+    lv_set_colour_change(fslv,entry_height,1,lv_palette[1]);
     lv_add_action(fslv,"<parent dir>");
     for (i=0;i<n;++i) {
       struct dirent *e = namelist[i];
@@ -568,20 +780,20 @@ static int midi_filter(const struct dirent *e) {
   return 1;
 }
 
-const char *midi_select(int xpos, int ypos, int width, int height, const char *title, const char *init_val, const uint32_t *palette) {
+const char *midi_select(int xpos, int ypos, int width, int height, const char *title, const char *init_val) {
   char port[256];
   struct dirent **namelist;
   int n = scandir("/dev/snd",&namelist,midi_filter,alphasort);
   if (n==0) return NULL;
   int i;
-  ListView *lv = lv_new(xpos,ypos,width,height,title,palette);
+  ListView *lv = lv_new(xpos,ypos,width,height,title);
   int entry_height = lv_entry_height();
   uint32_t gradient_header[entry_height];
   gradient(gradient_header,entry_height,0x79de07,0x488c14);
   for (i=0;i<entry_height;++i) {
     lv_set_colour_change(lv,i,1,gradient_header[i]);
   }
-  lv_set_colour_change(lv,entry_height,1,palette[1]);
+  lv_set_colour_change(lv,entry_height,1,lv_palette[1]);
   for (i=0;i<n;++i) {
     const char *name = namelist[i]->d_name;
     char *devname = midi_device_name(name);
@@ -610,7 +822,7 @@ const char *midi_select(int xpos, int ypos, int width, int height, const char *t
 }
 
 static void lv_draw(ListView *lv) {
-  if (lv->palette) osd_set_palette(lv->palette);
+  osd_set_palette(lv_palette);
   osd_set_palette_changes(lv->colour_change,lv->height);
   osd_set_position(lv->xpos,lv->ypos);
   osd_set_size(lv->width,lv->height);
@@ -675,10 +887,10 @@ int lv_run(ListView *lv) {
     }
     if (evtype == EV_KEY) {
       //printf("evtype=EV_KEY evcode=%d evvalue=%d\n",evcode,evvalue);
+      struct lv_entry *e = lv->entries[lv->selected];
       // keyboard event, key is pressed
       if (evvalue >= 1) {
         // key is pressed
-        struct lv_entry *e = lv->entries[lv->selected];
         switch (evcode) {
         case KEY_ESC:
         case BTN_START:
@@ -710,10 +922,26 @@ int lv_run(ListView *lv) {
           update_pos(lv,new_pos);
           break;
         case KEY_HOME:
-          update_pos(lv,0);
-          break;
         case KEY_END:
-          update_pos(lv,lv->n_entries-1);
+          if (e->type==LV_ENTRY_EDITABLE) {
+            struct lv_editable *ed = (struct lv_editable*)e;
+            highlight(lv,lv->selected-lv->offset,0);
+            if (evcode==KEY_HOME) {
+              ed->cur_pos = 0;
+              ed->cur_x = 0;
+            } else {
+              ed->cur_pos = ed->nc;
+              ed->cur_x = font_text_width(lv_font,ed->text);
+            }
+            if (editable_update_shift(ed)) {
+              int line_size = lv->width/16*font_get_height(lv_font);
+              memset(osd_bitmap+(lv->selected-lv->offset+1)*line_size,0,line_size*sizeof(uint32_t));
+              display_entry(lv,lv->selected-lv->offset);
+            }
+            highlight(lv,lv->selected-lv->offset,1);
+          } else {
+            update_pos(lv,evcode==KEY_END?lv->n_entries-1:0);
+          }
           break;
         case KEY_LEFT:
         case KEY_RIGHT:
@@ -728,6 +956,30 @@ int lv_run(ListView *lv) {
               funcret = lv->selected;
               quit = 1;
             }
+          } else if (e->type==LV_ENTRY_EDITABLE) {
+            struct lv_editable *ed = (struct lv_editable*)e;
+            highlight(lv,lv->selected-lv->offset,0);
+            if (evcode==KEY_LEFT) {
+              if (ed->cur_pos>0) {
+                int pos = ed->cur_pos;
+                do --pos; while ((ed->text[pos]&0x80) && (ed->text[pos]&0xc0)==0x80);
+                const char *p = ed->text+pos;
+                ed->cur_x -= font_char_width(lv_font,decode_utf8(&p));
+                ed->cur_pos = pos;
+              }
+            } else {
+              if (ed->cur_pos<ed->nc) {
+                const char *p = ed->text+ed->cur_pos;
+                ed->cur_x += font_char_width(lv_font,decode_utf8(&p));
+                ed->cur_pos = p-ed->text;
+              }
+            }
+            if (editable_update_shift(ed)) {
+              int line_size = lv->width/16*font_get_height(lv_font);
+              memset(osd_bitmap+(lv->selected-lv->offset+1)*line_size,0,line_size*sizeof(uint32_t));
+              display_entry(lv,lv->selected-lv->offset);
+            }
+            highlight(lv,lv->selected-lv->offset,1);
           }
           break;
         //case KEY_F2:
@@ -773,6 +1025,44 @@ int lv_run(ListView *lv) {
               }
             }
           }
+          else if (e->type==LV_ENTRY_EDITABLE) {
+            struct lv_editable *ed = (struct lv_editable*)e;
+            if (evcode==KEY_BACKSPACE) {
+              if (ed->cur_pos>0) {
+                int pos = ed->cur_pos;
+                do --pos; while ((ed->text[pos]&0x80) && (ed->text[pos]&0xc0)==0x80);
+                const char *p = ed->text+pos;
+                int c = decode_utf8(&p);
+                int len = ed->cur_pos-pos;
+                memmove(ed->text+pos,ed->text+ed->cur_pos,ed->nc-ed->cur_pos+1);
+                highlight(lv,lv->selected-lv->offset,0);
+                ed->cur_x -= font_char_width(lv_font,c);
+                ed->cur_pos = pos;
+                ed->nc -= len;
+                int cxd = ed->cur_x-20;
+                if (ed->shift>cxd) ed->shift = cxd>0?cxd:0;
+                int line_size = lv->width/16*font_get_height(lv_font);
+                memset(osd_bitmap+(lv->selected-lv->offset+1)*line_size,0,line_size*sizeof(uint32_t));
+                display_entry(lv,lv->selected-lv->offset);
+                highlight(lv,lv->selected-lv->offset,1);
+              }
+            }
+            else if (evcode==KEY_DELETE) {
+              if (ed->cur_pos<ed->nc) {
+                char *p0 = ed->text+ed->cur_pos;
+                const char *p = p0;
+                decode_utf8(&p);
+                int len = p-p0;
+                memmove(p0,p,ed->nc-ed->cur_pos-len+1);
+                highlight(lv,lv->selected-lv->offset,0);
+                ed->nc -= len;
+                int line_size = lv->width/16*font_get_height(lv_font);
+                memset(osd_bitmap+(lv->selected-lv->offset+1)*line_size,0,line_size*sizeof(uint32_t));
+                display_entry(lv,lv->selected-lv->offset);
+                highlight(lv,lv->selected-lv->offset,1);
+              }
+            }
+          }
           break;
         case KEY_ENTER:
         case BTN_SOUTH:
@@ -784,7 +1074,7 @@ int lv_run(ListView *lv) {
           else if (e->type==LV_ENTRY_FILE) {
             const struct lv_file *lf = (struct lv_file*)e;
             osd_hide();
-            const char *name = file_select(lv->xpos,lv->ypos,lv->width,lv->height,*lf->filename,lf->filter,lv->palette,lf->flags);
+            const char *name = file_select(lv->xpos,lv->ypos,lv->width,lv->height,*lf->filename,lf->filter,lf->flags);
             if (name) {
               free((void*)*lf->filename);
               *lf->filename = name;
@@ -795,7 +1085,7 @@ int lv_run(ListView *lv) {
           else if (e->type==LV_ENTRY_MIDI) {
             struct lv_midi *md = (struct lv_midi*)e;
             osd_hide();
-            const char *name = midi_select(lv->xpos,lv->ypos,lv->width,lv->height,e->title,*md->portname,lv->palette);
+            const char *name = midi_select(lv->xpos,lv->ypos,lv->width,lv->height,e->title,*md->portname);
             if (name) {
               free((void*)*md->portname);
               *md->portname = name;
@@ -805,6 +1095,26 @@ int lv_run(ListView *lv) {
             lv_draw(lv);
             osd_show();
           }
+        }
+      }
+
+      int c = read_character(evcode,evvalue);
+      if (c>=32&&e->type==LV_ENTRY_EDITABLE) {
+        char buf[16];
+        int len = encode_utf8(buf,c);
+        struct lv_editable *ed = (struct lv_editable*)e;
+        if (ed->capacity-ed->nc>=len) {
+          memmove(ed->text+ed->cur_pos+len,ed->text+ed->cur_pos,ed->nc-ed->cur_pos+1);
+          memcpy(ed->text+ed->cur_pos,buf,len);
+          highlight(lv,lv->selected-lv->offset,0);
+          ed->cur_x += font_char_width(lv_font,c);
+          ed->cur_pos += len;
+          ed->nc += len;
+          editable_update_shift(ed);
+          int line_size = lv->width/16*font_get_height(lv_font);
+          memset(osd_bitmap+(lv->selected-lv->offset+1)*line_size,0,line_size*sizeof(uint32_t));
+          display_entry(lv,lv->selected-lv->offset);
+          highlight(lv,lv->selected-lv->offset,1);
         }
       }
     }

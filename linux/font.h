@@ -12,6 +12,9 @@ Font * font_new_from_file(const char *filename);
 // get font height in pixels
 int font_get_height(const Font *fnt);
 
+// get character width in pixels
+int font_char_width(const Font *fnt, int c);
+
 // get text width in pixels of UTF-8-encoded string
 int font_text_width(const Font *fnt, const char *txt);
 

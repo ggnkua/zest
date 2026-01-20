@@ -46,17 +46,17 @@ static int truefalse(const char *x) {
 }
 
 static const char *memsize_values[] = {"256K","512K","1M","2M","2.5M","4M","8M","14M"};
+static const char *keymap_values[] = {"dk","nl","uk","us","fr","bepo","de","no","pl","es","se"};
 
 // interpret string str as a memory size setting
-static int memorysize(const char *x) {
+static int list_id(const char *list[], int n, const char *x, int dflt) {
   int i;
-  for (i=0;i<sizeof(memsize_values)/sizeof(memsize_values[0]);++i) {
-    if (strcasecmp(x,memsize_values[i])==0)
+  for (i=0;i<n;++i) {
+    if (strcasecmp(x,list[i])==0)
       return i;
   }
-
-  printf("invalid size setting `%s`\n",x);
-  return CFG_1M;   // 1 MB
+  printf("invalid setting `%s`\n",x);
+  return dflt;
 }
 
 static int handler(void* user, const char* section, const char* name, const char* value) {
@@ -75,7 +75,7 @@ static int handler(void* user, const char* section, const char* name, const char
   } else if (MATCH("main","turbo")) {
     pconfig->turbo = truefalse(value);
   } else if (MATCH("main","mem_size")) {
-    pconfig->mem_size = memorysize(value);
+    pconfig->mem_size = list_id(memsize_values,sizeof(memsize_values)/sizeof(memsize_values[0]),value,CFG_1M);
   } else if (MATCH("main", "wakestate")) {
     int ws = atoi(value);
     if (ws<1 || ws>4) {
@@ -104,6 +104,8 @@ static int handler(void* user, const char* section, const char* name, const char
     if (tz<-12) tz = -12;
     if (tz>12) tz = 12;
     pconfig->timezone = tz+12;
+  } else if (MATCH("main","keymap")) {
+    pconfig->keymap_id = list_id(keymap_values,sizeof(keymap_values)/sizeof(keymap_values[0]),value,3);
   } else if (MATCH("floppy","floppy_a")) {
     if (value) pconfig->floppy_a = strdup(value);
   } else if (MATCH("floppy","floppy_a_enable")) {
@@ -163,6 +165,7 @@ void config_init(void) {
   config.scan_doubler_mode = 0;
   config.rom_file = NULL;
   config.timezone = 12;
+  config.keymap_id = 3;
   config.floppy_a = NULL;
   config.floppy_a_enable = 1;
   config.floppy_a_write_protect = 0;
@@ -184,6 +187,7 @@ void config_init(void) {
 void config_set_file(const char *filename) {
   if (config_file) {
     free((void*)config_file);
+    config_file = NULL;
   }
   if (filename) {
     config_file = strdup(filename);
@@ -218,6 +222,7 @@ void config_save(void) {
   fprintf(fd,"scan_doubler_mode = %d\n",config.scan_doubler_mode);
   fprintf(fd,"rom_file = %s\n",config.rom_file?config.rom_file:"");
   fprintf(fd,"timezone = %d\n",config.timezone-12);
+  fprintf(fd,"keymap = %s\n",keymap_values[config.keymap_id]);
 
   fprintf(fd,"\n[floppy]\n");
   fprintf(fd,"floppy_a_enable = %s\n",config.floppy_a_enable?"true":"false");
