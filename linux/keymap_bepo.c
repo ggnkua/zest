@@ -1,5 +1,5 @@
 // keymap_bepo.c - keymap - PC French (BEPO)
-const int keymap_bepo[8][128] = {
+const int16_t keymap_bepo[8][128] = {
   // base
   { 0,27,'"',171,187,'(',')','@','+','-','/','*','=','%',8,9,
     'b',233,'p','o',232,-15,'v','d','l','j','z','w',13,0,'a','u',

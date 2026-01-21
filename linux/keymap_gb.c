@@ -1,5 +1,5 @@
 // keymap_gb.c - keymap - PC English (UK)
-const int keymap_gb[8][128] = {
+const int16_t keymap_gb[8][128] = {
   // base
   { 0,27,'1','2','3','4','5','6','7','8','9','0','-','=',8,9,
     'q','w','e','r','t','y','u','i','o','p','[',']',13,0,'a','s',

@@ -1,5 +1,5 @@
 // keymap_fr.c - keymap - PC French
-const int keymap_fr[8][128] = {
+const int16_t keymap_fr[8][128] = {
   // base
   { 0,27,'&',233,'"','\'','(','-',232,'_',231,224,')','=',8,9,
     'a','z','e','r','t','y','u','i','o','p',-15,'$',13,0,'q','s',

@@ -61,7 +61,7 @@
 
 struct {
   const char *title;
-  const int (*map)[128];
+  const int16_t (*map)[128];
 } keymaps[] = {
   {"Danish",keymap_dk},
   {"Dutch",keymap_nl},
@@ -157,7 +157,7 @@ static int read_character(int keycode, int pressed) {
   else if (pressed) {
     int val = keymaps[config.keymap_id].map[shiftstate][keycode];
     if (dead) {
-      int (*p)[2] = dead_combos;
+      int16_t (*p)[2] = dead_combos;
       while ((*p)[0]!=dead) p=p+(*p)[1]+1;
       int n = (*p)[1];
       int i;

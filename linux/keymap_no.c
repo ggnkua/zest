@@ -1,5 +1,5 @@
 // keymap_no.c - keymap - PC Norwegian
-const int keymap_no[8][128] = {
+const int16_t keymap_no[8][128] = {
   // base
   { 0,27,'1','2','3','4','5','6','7','8','9','0','+','\\',8,9,
     'q','w','e','r','t','y','u','i','o','p',229,-18,13,0,'a','s',

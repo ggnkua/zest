@@ -1,5 +1,5 @@
 // keymap_es.c - keymap - PC Spanish
-const int keymap_es[8][128] = {
+const int16_t keymap_es[8][128] = {
   // base
   { 0,27,'1','2','3','4','5','6','7','8','9','0','\'',161,8,9,
     'q','w','e','r','t','y','u','i','o','p',-21,'+',13,0,'a','s',

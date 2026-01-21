@@ -1,5 +1,5 @@
 // keymap_de.c - keymap - PC German
-const int keymap_de[8][128] = {
+const int16_t keymap_de[8][128] = {
   // base
   { 0,27,'1','2','3','4','5','6','7','8','9','0',223,-3,8,9,
     'q','w','e','r','t','z','u','i','o','p',252,'+',13,0,'a','s',
