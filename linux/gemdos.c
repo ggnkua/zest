@@ -786,12 +786,20 @@ static void Fsfirst(unsigned int pname, unsigned int attr) {
     return;
   }
 
-  // fill DTA with the correct data
-  struct _file_search *fs = malloc(sizeof(struct _file_search));
-  if (!fs) {
-    gemdos_fallback();
-    return;
+  // cleanup if previous Fsfirst/Fsnext sequence did not go to the end
+  struct _file_search *fs;
+  if (!memcmp(dta.d_reserved,"zeST",4)) {
+    memcpy(&fs,dta.d_reserved+4,sizeof(fs));
+    closedir(fs->d);
+  } else {
+    fs = malloc(sizeof(struct _file_search));
+    if (!fs) {
+      gemdos_fallback();
+      return;
+    }
   }
+
+  // fill DTA with the correct data
   strcpy(fs->path,path_host);
   fs->path_len = strlen(path_host);
   strcpy(fs->pattern,pattern);
@@ -856,14 +864,16 @@ static void Fopen(unsigned int pname, unsigned int mode) {
     gemdos_return(-36);   // EACCDN
     return;
   }
-  int handle = open(path_host,opmode[mode&7]);
-  if (handle==-1) {
+  int fd = open(path_host,opmode[mode&7]);
+  if (fd==-1) {
     // file not found. should not happen
     gemdos_return(-33);   // EFILNF
     return;
   }
   // return our custom handle
-  gemdos_return(FD_OFFSET+handle);
+  int handle = fd+FD_OFFSET;
+  DPRINTF(" -> %d\n",handle);
+  gemdos_return(handle);
 }
 
 static void Fcreate(unsigned int pname, unsigned int attr) {
