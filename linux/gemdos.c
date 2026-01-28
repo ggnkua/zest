@@ -1249,6 +1249,7 @@ static void drive_init(unsigned int begin_adr, unsigned int resblk_adr) {
   if (gemdos_drv==2) {
     // if drive is C:, set it as the current drive
     current_drv = 2;
+    strncpy(current_path,config.gemdos,sizeof current_path);
   }
   gemdos_fallback();
 }
