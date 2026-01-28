@@ -61,6 +61,15 @@ static int filter_img(const struct dirent *e) {
   return !strcasecmp(ext,".img");
 }
 
+static int filter_cfg(const struct dirent *e) {
+  if (e->d_type==DT_DIR) {
+    return strcmp(e->d_name,".")&&strcmp(e->d_name,"..");
+  }
+  char *ext = strrchr(e->d_name,'.');
+  if (!ext) return 0;
+  return !strcasecmp(ext,".cfg");
+}
+
 static int filter_directory(const struct dirent *e) {
   if (e->d_type==DT_DIR) {
     return strcmp(e->d_name,".")&&strcmp(e->d_name,"..");
@@ -105,8 +114,8 @@ static int settings(void) {
     lv_add_choice(lv,"Right Alt key",&config.right_alt_is_altgr,2,"Alternate","AltGr");
     int e_wakestate = lv_add_choice(lv,"Wakestate",&config.wakestate,4,"WS1","WS2","WS3","WS4");
     lv_add_choice(lv,"Shifter Wakestate",&config.shifter_wakestate,2,"SWS1","SWS2");
-    lv_choice_set_dynamic(lv,e_turbo,1);
-    lv_choice_set_dynamic(lv,e_wakestate,1);
+    lv_entry_set_dynamic(lv,e_turbo,1);
+    lv_entry_set_dynamic(lv,e_wakestate,1);
     lv_select(lv,selected);
 
     for (;;) {
@@ -157,6 +166,10 @@ static int settings(void) {
 static int tools(void) {
   int quit = 0;
   char jukebox_timeout[8];
+  const char *config_file = strdup(config_get_file());
+  char new_config[32];
+  new_config[0] = 0;
+
   while (!quit) {
     ListView *lv = lv_new(XPOS,YPOS,WIDTH,HEIGHT,"zeST tools");
     int entry_height = lv_entry_height();
@@ -173,6 +186,7 @@ static int tools(void) {
       "UTC-12","UTC-11","UTC-10","UTC-9","UTC-8","UTC-7","UTC-6","UTC-5","UTC-4","UTC-3","UTC-2","UTC-1","UTC+0",
       "UTC+1","UTC+2","UTC+3","UTC+4","UTC+5","UTC+6","UTC+7","UTC+8","UTC+9","UTC+10","UTC+11","UTC+12");
     lv_add_keymap_choice(lv);
+
     int e_jbmode = lv_add_choice(lv,"Jukebox mode",&config.jukebox_enabled,2,"off","on");
     int e_timeout;
     if (config.jukebox_enabled) {
@@ -182,12 +196,38 @@ static int tools(void) {
     } else {
       e_timeout = -1;
     }
-    lv_choice_set_dynamic(lv,e_jbmode,1);
+    lv_entry_set_dynamic(lv,e_jbmode,1);
+
+    int e_config = lv_add_file(lv,"Config file",&config_file,0,filter_cfg);
+    lv_entry_set_dynamic(lv,e_config,1);
+    int e_newconf = lv_add_editable(lv,"Save config as",sizeof(new_config)-5,new_config,6);
+    lv_entry_set_dynamic(lv,e_newconf,1);
+
     int e = lv_run(lv);
     if (e==e_jbmode) {
       // do nothing, just have the menu refreshed
-    } else if (e==e_timeout) {
-      printf("val=%s\n",jukebox_timeout);
+    } else if (e_timeout!=-1&&e==e_timeout) {
+    } else if (e==e_config) {
+      if (strcmp(config_file,config_get_file())) {
+        config_set_file(config_file);
+        config_load();
+      }
+    } else if (e==e_newconf) {
+      char *ext = strrchr(new_config,'.');
+      if (!ext) strcat(new_config,".cfg");
+      char new_path[1024];
+      strcpy(new_path,config_get_file());
+      char *sep = strrchr(new_path,'/');
+      if (sep) {
+        strcpy(sep+1,new_config);
+      } else {
+        strcpy(new_path,new_config);
+      }
+      free((void*)config_file);
+      config_set_file(new_path);
+      config_save();
+      config_file = strdup(new_path);
+      new_config[0] = 0;
     } else {
       if (config.jukebox_enabled) {
         int timeout = atoi(jukebox_timeout);
@@ -197,6 +237,7 @@ static int tools(void) {
     }
     lv_delete(lv);
   }
+  free((void*)config_file);
 
   return 0;
 }

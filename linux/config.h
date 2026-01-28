@@ -79,6 +79,9 @@ void config_init(void);
 // Set config file
 void config_set_file(const char *filename);
 
+// Get config file
+const char *config_get_file(void);
+
 // Load config
 void config_load(void);
 

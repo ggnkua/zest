@@ -86,6 +86,7 @@ extern volatile int thr_end;
 
 struct lv_entry {
   int type;
+  int dynamic;
   const char *title;
 };
 
@@ -99,7 +100,6 @@ struct lv_choice {
   int n_choices;
   int *selected;
   const char **entries;
-  int dynamic;
 };
 
 struct lv_file {
@@ -321,6 +321,7 @@ static int add_entry(ListView *lv,int type,const char *title,struct lv_entry *e)
     lv->entries = realloc(lv->entries,lv->capacity*sizeof(struct lv_entry*));
   }
   e->type = type;
+  e->dynamic = 0;
   e->title = strdup(title);
   lv->entries[lv->n_entries] = e;
   return lv->n_entries++;
@@ -395,7 +396,6 @@ int lv_add_choice(ListView *lv, const char *title, int *pselect, int count, ...)
   ch->n_choices = count;
   ch->selected = pselect;
   ch->entries = malloc(count*sizeof(const char*));
-  ch->dynamic = 0;
 
   int i;
   va_list ap;
@@ -413,7 +413,6 @@ int lv_add_choice_array(ListView *lv, const char *title, int *pselect, int count
   ch->n_choices = count;
   ch->selected = pselect;
   ch->entries = malloc(count*sizeof(const char*));
-  ch->dynamic = 0;
 
   int i;
   for (i=0;i<count;++i) {
@@ -428,7 +427,6 @@ int lv_add_keymap_choice(ListView *lv) {
   ch->n_choices = sizeof(keymaps)/sizeof(keymaps[0]);
   ch->selected = &config.keymap_id;
   ch->entries = malloc(ch->n_choices*sizeof(const char*));
-  ch->dynamic = 0;
 
   int i;
   for (i=0;i<ch->n_choices;++i) {
@@ -437,13 +435,10 @@ int lv_add_keymap_choice(ListView *lv) {
   return add_entry(lv,LV_ENTRY_CHOICE,"Keymap",(struct lv_entry*)ch);
 }
 
-// sets if choice is dynamic (menu exits on every change)
-void lv_choice_set_dynamic(ListView *lv, int entry, int dynamic) {
+// sets if entry is dynamic (menu exits on every change)
+void lv_entry_set_dynamic(ListView *lv, int entry, int dynamic) {
   struct lv_entry *e = lv->entries[entry];
-  if (e->type==LV_ENTRY_CHOICE) {
-    struct lv_choice *ch = (struct lv_choice *)e;
-    ch->dynamic = dynamic;
-  }
+  e->dynamic = dynamic;
 }
 
 // add entry with a file to select
@@ -953,7 +948,7 @@ int lv_run(ListView *lv) {
             } else {
               update_choice(lv,(*ch->selected+1)%ch->n_choices);
             }
-            if (ch->dynamic) {
+            if (e->dynamic) {
               funcret = lv->selected;
               quit = 1;
             }
@@ -1082,6 +1077,10 @@ int lv_run(ListView *lv) {
             }
             lv_draw(lv);
             osd_show();
+            if (e->dynamic) {
+              funcret = lv->selected;
+              quit = 1;
+            }
           }
           else if (e->type==LV_ENTRY_MIDI) {
             struct lv_midi *md = (struct lv_midi*)e;
@@ -1095,6 +1094,12 @@ int lv_run(ListView *lv) {
             }
             lv_draw(lv);
             osd_show();
+          }
+          else if (e->type==LV_ENTRY_EDITABLE) {
+            if (e->dynamic) {
+              funcret = lv->selected;
+              quit = 1;
+            }
           }
         }
       }

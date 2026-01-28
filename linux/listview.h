@@ -51,8 +51,8 @@ int lv_add_choice_array(ListView *lv, const char *title, int *pselect, int count
 // add entry with a list of choices
 int lv_add_keymap_choice(ListView *lv);
 
-// sets if choice is dynamic (menu exits on every change)
-void lv_choice_set_dynamic(ListView *v, int entry, int dynamic);
+// sets if entry is dynamic (menu exits on every change)
+void lv_entry_set_dynamic(ListView *v, int entry, int dynamic);
 
 // add entry with a file to select
 // possible flags:

@@ -59,6 +59,18 @@ static int list_id(const char *list[], int n, const char *x, int dflt) {
   return dflt;
 }
 
+// replace a string pointer with another, freeing the old one if necessary
+static void set_str_var(const char **pv, const char *str) {
+  if (*pv) {
+    free((char*)*pv);
+  }
+  if (str) {
+    *pv = strdup(str);
+  } else {
+    *pv = NULL;
+  }
+}
+
 static int handler(void* user, const char* section, const char* name, const char* value) {
   ZestConfig* pconfig = user;
 
@@ -98,7 +110,7 @@ static int handler(void* user, const char* section, const char* name, const char
       pconfig->scan_doubler_mode = mode;
     }
   } else if (MATCH("main","rom_file")) {
-    if (value) pconfig->rom_file = strdup(value);
+    set_str_var(&pconfig->rom_file,value);
   } else if (MATCH("main","timezone")) {
     int tz = atoi(value);
     if (tz<-12) tz = -12;
@@ -107,38 +119,36 @@ static int handler(void* user, const char* section, const char* name, const char
   } else if (MATCH("main","keymap")) {
     pconfig->keymap_id = list_id(keymap_values,sizeof(keymap_values)/sizeof(keymap_values[0]),value,3);
   } else if (MATCH("floppy","floppy_a")) {
-    if (value) pconfig->floppy_a = strdup(value);
+    set_str_var(&pconfig->floppy_a,value);
   } else if (MATCH("floppy","floppy_a_enable")) {
     if (value) pconfig->floppy_a_enable = truefalse(value);
   } else if (MATCH("floppy","floppy_a_write_protect")) {
     if (value) pconfig->floppy_a_write_protect = truefalse(value);
   } else if (MATCH("floppy","floppy_b")) {
-    if (value) pconfig->floppy_b = strdup(value);
+    set_str_var(&pconfig->floppy_b,value);
   } else if (MATCH("floppy","floppy_b_enable")) {
     if (value) pconfig->floppy_b_enable = truefalse(value);
   } else if (MATCH("floppy","floppy_b_write_protect")) {
     if (value) pconfig->floppy_b_write_protect = truefalse(value);
   } else if (MATCH("hdd","image")) {
-    if (value) pconfig->acsi[0] = strdup(value);
+    set_str_var(&pconfig->acsi[0],value);
   } else if (!strcmp(section,"hdd") && !strncmp(name,"acsi",4)) {
-    if (value) {
-      int id = atoi(name+4);
-      if (id>=0 && id<=7) {
-        pconfig->acsi[id] = strdup(value);
-      }
+    int id = atoi(name+4);
+    if (id>=0 && id<=7) {
+      set_str_var(&pconfig->acsi[id],value);
     }
   } else if (MATCH("hdd","gemdos")) {
-    if (value) pconfig->gemdos = strdup(value);
+    set_str_var(&pconfig->gemdos,value);
   } else if (MATCH("keyboard","right_alt_is_altgr")) {
     if (value) pconfig->right_alt_is_altgr = truefalse(value);
   } else if (MATCH("midi","in")) {
-    if (value) pconfig->midi_in = strdup(value);
+    set_str_var(&pconfig->midi_in,value);
   } else if (MATCH("midi","out")) {
-    if (value) pconfig->midi_out = strdup(value);
+    set_str_var(&pconfig->midi_out,value);
   } else if (MATCH("jukebox","enabled")) {
     if (value) pconfig->jukebox_enabled = truefalse(value);
   } else if (MATCH("jukebox","path")) {
-    if (value) pconfig->jukebox_path = strdup(value);
+    set_str_var(&pconfig->jukebox_path,value);
   } else if (MATCH("jukebox","timeout")) {
     int t = atoi(value);
     if (t < 1)
@@ -194,9 +204,14 @@ void config_set_file(const char *filename) {
   }
 }
 
+const char *config_get_file(void) {
+  return config_file;
+}
+
 void config_load(void) {
   if (!config_file)
     return;
+  config_init();
   if (ini_parse(config_file,handler,&config) < 0) {
     printf("Can't load `%s`\n",config_file);
     return;
