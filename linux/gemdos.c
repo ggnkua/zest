@@ -114,7 +114,8 @@ struct _dta {
   uint8_t   d_length[4];                /* File length */
   char      d_fname[14];                /* Filename */
 } dta;
-static unsigned int addr_dta;
+static unsigned int addr_dta[256];
+static int dta_id = 0;
 static unsigned int gemdos_drv;         /* 0:A,1:B etc */
 static unsigned int current_drv;        /* 0:A,1:B etc */
 static char current_path[1024];
@@ -254,7 +255,7 @@ static time_t d2u_time(unsigned int time, unsigned int date) {
 
 // get bytes from address (stub must be in action mode)
 // set nbytes to 0 if reading a null-terminated string
-static void gemdos_read_memory(unsigned char *buf, unsigned int addr, unsigned int nbytes) {
+static void gemdos_read_memory(void *buf, unsigned int addr, unsigned int nbytes) {
   result = buf;
   // wait for stub to perform an OP_ACTION command
   if (gemdos_cond_wait(500,"gemdos_read_memory")!=0) return;
@@ -266,7 +267,6 @@ static void gemdos_read_memory(unsigned char *buf, unsigned int addr, unsigned i
   // wait for OP_RESULT command and sectors from DMA
   if (gemdos_cond_wait(500,"gemdos_read_memory 2")!=0) return;
   *acsireg = STATUS_OK;
-  //return (const uint8_t*)iobuf;
 }
 
 // write bytes to address (stub must be in action mode) (generic function)
@@ -454,6 +454,16 @@ static int path_lookup(char *search_path, char *src) {
   return 0;
 }
 
+// Pterm0,Ptermres,Pterm
+static void Ptermx(void) {
+  DPRINTF("Ptermx\n");
+  action_required();
+  if (dta_id>0) {
+    gemdos_read_memory(&dta,addr_dta[--dta_id],16);
+  }
+  gemdos_fallback();
+}
+
 // Dsetpath
 static void Dsetpath(unsigned int ppath) {
   char path_host[1024];
@@ -616,7 +626,8 @@ static void Pexec(int mode, unsigned int pname, unsigned int pcmdline, int penv)
         break;
       }
       // default DTA address
-      addr_dta = pbasepage+0x80;
+      addr_dta[++dta_id] = pbasepage+0x80;
+      memset(dta.d_reserved,0,16);
       // patch stack
       write_u16(action,ACTION_MODSTACK);
       write_u16(action+2,16);
@@ -639,7 +650,8 @@ static void Pexec(int mode, unsigned int pname, unsigned int pcmdline, int penv)
       DPRINTF("Pexec(%d,%#x,%#x,%s)\n",mode,pname,pcmdline,printedenv);
       if (mode==4 || mode==6) {
         // default DTA address
-        addr_dta = pcmdline+0x80;
+        addr_dta[++dta_id] = pcmdline+0x80;
+        memset(dta.d_reserved,0,16);
       }
       gemdos_fallback();
   }
@@ -702,7 +714,7 @@ static void next_file(void) {
     if (e==NULL) {
       closedir(fs->d);
       memset(dta.d_reserved,0,16);
-      gemdos_write_memory(&dta,addr_dta,16);
+      gemdos_write_memory(&dta,addr_dta[dta_id],16);
       gemdos_return(fs->first?-33:-49);   // EFILNF/ENMFIL
       free(fs);
       return;
@@ -747,7 +759,7 @@ static void next_file(void) {
   if (e->d_type==DT_DIR) attrib = 16;
   dta.d_attrib = attrib;
 
-  gemdos_write_memory0(((void*)&dta)+20,addr_dta+20,sizeof(struct _dta)-20);
+  gemdos_write_memory0(((void*)&dta)+20,addr_dta[dta_id]+20,sizeof(struct _dta)-20);
 }
 
 // Fsfirst call
@@ -809,7 +821,7 @@ static void Fsfirst(unsigned int pname, unsigned int attr) {
   memcpy(dta.d_reserved,"zeST",4);
   memcpy(dta.d_reserved+4,&fs,sizeof fs);
   memcpy(dta.d_reserved+12,"zeST",4);
-  gemdos_write_memory(&dta,addr_dta,16);
+  gemdos_write_memory(&dta,addr_dta[dta_id],16);
 
   next_file();
 }
@@ -821,11 +833,11 @@ static void Fsnext(void) {
 }
 
 static void Fsetdta(unsigned int addr) {
-  if (addr_dta!=addr) {
+  if (addr_dta[dta_id]!=addr) {
     action_required();
     gemdos_read_memory(NULL,addr,sizeof(struct _dta));
     memcpy(&dta,(void*)iobuf,sizeof(struct _dta));
-    addr_dta = addr;
+    addr_dta[dta_id] = addr;
     gemdos_fallback();
   } else {
     no_action_required();
@@ -1261,6 +1273,11 @@ static void *gemdos_thread(void *ptr) {
   while (!thr_end) {
     if (gemdos_cond_wait(200,"gemdos_thread")==0) {
       switch (gemdos_opcode) {
+      case 0x00:  // Pterm0
+      case 0x31:  // Ptermres
+      case 0x4c:  // Pterm
+        Ptermx();
+        break;
       case 0x0e:  // Dsetdrv
         current_drv = read_u16(buf+2);
         DPRINTF("Dsetdrv(%d)\n",current_drv);
@@ -1395,7 +1412,10 @@ void gemdos_acsi_cmd(void) {
     unsigned int op = acsi_command[1];
     if (op==OP_GEMDOS) {
       gemdos_opcode = read_u16(acsi_command+2);
-      if (gemdos_opcode==0x19   // Dgetdrv
+      if (gemdos_opcode==0x00   // Pterm0
+        || gemdos_opcode==0x19  // Dgetdrv
+        || gemdos_opcode==0x31  // Ptermres
+        || gemdos_opcode==0x4c  // Pterm
         || gemdos_opcode==0x4f  // Fsnext
         || gemdos_opcode==0x7a53// 'zS' zeST stub detection
       ) {
@@ -1430,7 +1450,6 @@ void gemdos_acsi_cmd(void) {
         DPRINTF("Ignored: %#x ",gemdos_opcode);
         switch (gemdos_opcode) {
         case 0x20: DPRINTF("Super"); break;
-        case 0x31: DPRINTF("Ptermres"); break;
         case 0x48: DPRINTF("Malloc"); break;
         case 0x49: DPRINTF("Mfree"); break;
         case 0x4a: DPRINTF("Mshrink"); break;
