@@ -116,8 +116,6 @@ static int handler(void* user, const char* section, const char* name, const char
     if (tz<-12) tz = -12;
     if (tz>12) tz = 12;
     pconfig->timezone = tz+12;
-  } else if (MATCH("main","keymap")) {
-    pconfig->keymap_id = list_id(keymap_values,sizeof(keymap_values)/sizeof(keymap_values[0]),value,3);
   } else if (MATCH("floppy","floppy_a")) {
     set_str_var(&pconfig->floppy_a,value);
   } else if (MATCH("floppy","floppy_a_enable")) {
@@ -139,6 +137,8 @@ static int handler(void* user, const char* section, const char* name, const char
     }
   } else if (MATCH("hdd","gemdos")) {
     set_str_var(&pconfig->gemdos,value);
+  } else if (MATCH("keyboard","keymap")) {
+    pconfig->keymap_id = list_id(keymap_values,sizeof(keymap_values)/sizeof(keymap_values[0]),value,3);
   } else if (MATCH("keyboard","right_alt_is_altgr")) {
     if (value) pconfig->right_alt_is_altgr = truefalse(value);
   } else if (MATCH("midi","in")) {
@@ -175,7 +175,6 @@ void config_init(void) {
   config.scan_doubler_mode = 0;
   config.rom_file = NULL;
   config.timezone = 12;
-  config.keymap_id = 3;
   config.floppy_a = NULL;
   config.floppy_a_enable = 1;
   config.floppy_a_write_protect = 0;
@@ -186,6 +185,7 @@ void config_init(void) {
     config.acsi[i] = NULL;
   }
   config.gemdos = NULL;
+  config.keymap_id = 3;
   config.right_alt_is_altgr = 0;
   config.midi_in = NULL;
   config.midi_out = NULL;
@@ -237,7 +237,6 @@ void config_save(void) {
   fprintf(fd,"scan_doubler_mode = %d\n",config.scan_doubler_mode);
   fprintf(fd,"rom_file = %s\n",config.rom_file?config.rom_file:"");
   fprintf(fd,"timezone = %d\n",config.timezone-12);
-  fprintf(fd,"keymap = %s\n",keymap_values[config.keymap_id]);
 
   fprintf(fd,"\n[floppy]\n");
   fprintf(fd,"floppy_a_enable = %s\n",config.floppy_a_enable?"true":"false");
@@ -265,6 +264,7 @@ void config_save(void) {
   }
 
   fprintf(fd,"\n[keyboard]\n");
+  fprintf(fd,"keymap = %s\n",keymap_values[config.keymap_id]);
   fprintf(fd,"right_alt_is_altgr = %s\n",config.right_alt_is_altgr?"true":"false");
 
   if (config.midi_in||config.midi_out) {

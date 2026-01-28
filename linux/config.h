@@ -44,7 +44,6 @@ typedef struct {
   int scan_doubler_mode;            // scan doubler mode (0-1)
   const char *rom_file;             // ROM file, full path
   int timezone;                     // local timezone (-12..12)
-  int keymap_id;                    // keymap id
 
   // floppy
   const char *floppy_a;             // A: floppy image file, full path
@@ -59,6 +58,7 @@ typedef struct {
   const char *gemdos;               // GEMDOS drive
 
   // keyboard
+  int keymap_id;                    // keymap id (de,fr,us etc)
   int right_alt_is_altgr;           // right alt = 1:Milan AltGr code, 0:Alternate
 
   // MIDI
