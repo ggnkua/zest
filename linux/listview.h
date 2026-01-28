@@ -62,7 +62,7 @@ int lv_add_file(ListView *lv, const char *title, const char **pfilename, int fla
 
 int lv_add_midi(ListView *lv, const char *title, const char **pportname);
 
-int lv_add_editable(ListView *lv, const char *title, int capacity, char *text);
+int lv_add_editable(ListView *lv, const char *title, int capacity, char *text, int width);
 
 void lv_delete(ListView *lv);
 

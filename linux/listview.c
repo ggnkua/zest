@@ -55,7 +55,6 @@
 #define N_RASTER_CHOICE 4
 #define N_RASTER_FILE 6
 #define N_RASTER_MIDI 8
-#define N_RASTER_EDITABLE 7
 
 #define BUF_SIZE 256
 
@@ -123,6 +122,7 @@ struct lv_editable {
   int cur_pos;              // cursor position in string
   int cur_x;                // cursor position in pixels
   int shift;                // number of pixels of textfield shifting
+  int n_raster;
   char *text;
 };
 
@@ -471,7 +471,7 @@ int lv_add_midi(ListView *lv, const char *title, const char **pportname) {
 }
 
 // add entry with an editable text field
-int lv_add_editable(ListView *lv, const char *title, int capacity, char *text) {
+int lv_add_editable(ListView *lv, const char *title, int capacity, char *text, int width) {
   struct lv_editable *e = malloc(sizeof(struct lv_editable));
   e->capacity = capacity;
   e->nc = strlen(text);
@@ -479,6 +479,7 @@ int lv_add_editable(ListView *lv, const char *title, int capacity, char *text) {
   e->cur_pos = e->nc;
   e->cur_x = font_text_width(lv_font,text);
   e->shift = 0;
+  e->n_raster = width;
   return add_entry(lv,LV_ENTRY_EDITABLE,title,(struct lv_entry*)e);
 }
 
@@ -487,8 +488,8 @@ static int editable_update_shift(struct lv_editable *ed) {
     ed->shift = ed->cur_x;
     return 1;
   }
-  if (ed->cur_x-ed->shift >= N_RASTER_EDITABLE*16) {
-    ed->shift = ed->cur_x-N_RASTER_EDITABLE*16+1;
+  if (ed->cur_x-ed->shift >= ed->n_raster*16) {
+    ed->shift = ed->cur_x-ed->n_raster*16+1;
     return 1;
   }
   return 0;
@@ -540,8 +541,8 @@ static void display_entry(ListView *lv, int line_no) {
   }
   case LV_ENTRY_EDITABLE: {
     const struct lv_editable *ed = (struct lv_editable*)e;
-    font_render_text(lv_font,bitmap,raster_count,2,font_height,(raster_count-N_RASTER_EDITABLE)*16,0,e->title);
-    font_render_text(lv_font,bitmap+raster_count-N_RASTER_EDITABLE,raster_count,2,font_height,N_RASTER_EDITABLE*16,-ed->shift,ed->text);
+    font_render_text(lv_font,bitmap,raster_count,2,font_height,(raster_count-ed->n_raster)*16,0,e->title);
+    font_render_text(lv_font,bitmap+raster_count-ed->n_raster,raster_count,2,font_height,ed->n_raster*16,-ed->shift,ed->text);
     break;
   }
   }
@@ -561,7 +562,7 @@ static void highlight(ListView *lv, int line_no, int highlight) {
     }
   } else {
     int i,y;
-    int n_raster = e->type==LV_ENTRY_CHOICE?N_RASTER_CHOICE:e->type==LV_ENTRY_FILE?N_RASTER_FILE:e->type==LV_ENTRY_MIDI?N_RASTER_MIDI:N_RASTER_EDITABLE;
+    int n_raster = e->type==LV_ENTRY_CHOICE?N_RASTER_CHOICE:e->type==LV_ENTRY_FILE?N_RASTER_FILE:e->type==LV_ENTRY_MIDI?N_RASTER_MIDI:((struct lv_editable*)e)->n_raster;
     int beg = raster_count-n_raster;
     uint32_t *bitmap = osd_bitmap+raster_count*font_height*(line_no+1);
     for (y=0;y<font_height;++y) {

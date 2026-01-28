@@ -156,6 +156,7 @@ static int settings(void) {
 
 static int tools(void) {
   int quit = 0;
+  char jukebox_timeout[8];
   while (!quit) {
     ListView *lv = lv_new(XPOS,YPOS,WIDTH,HEIGHT,"zeST tools");
     int entry_height = lv_entry_height();
@@ -172,15 +173,26 @@ static int tools(void) {
       "UTC-12","UTC-11","UTC-10","UTC-9","UTC-8","UTC-7","UTC-6","UTC-5","UTC-4","UTC-3","UTC-2","UTC-1","UTC+0",
       "UTC+1","UTC+2","UTC+3","UTC+4","UTC+5","UTC+6","UTC+7","UTC+8","UTC+9","UTC+10","UTC+11","UTC+12");
     lv_add_keymap_choice(lv);
-    int e_jbmode = lv_add_choice(lv,"Jukebox mode",&config.jukebox_enabled,2,"no","yes");
+    int e_jbmode = lv_add_choice(lv,"Jukebox mode",&config.jukebox_enabled,2,"off","on");
+    int e_timeout;
     if (config.jukebox_enabled) {
       lv_add_file(lv,"Jukebox directory",&config.jukebox_path,LV_FILE_DIRECTORY,filter_directory);
+      sprintf(jukebox_timeout,"%d",config.jukebox_timeout_duration);
+      e_timeout = lv_add_editable(lv,"Jukebox timeout (s)",sizeof(jukebox_timeout)-1,jukebox_timeout,5);
+    } else {
+      e_timeout = -1;
     }
     lv_choice_set_dynamic(lv,e_jbmode,1);
     int e = lv_run(lv);
     if (e==e_jbmode) {
       // do nothing, just have the menu refreshed
+    } else if (e==e_timeout) {
+      printf("val=%s\n",jukebox_timeout);
     } else {
+      if (config.jukebox_enabled) {
+        int timeout = atoi(jukebox_timeout);
+        if (timeout>0) config.jukebox_timeout_duration = timeout;
+      }
       quit = 1;
     }
     lv_delete(lv);
