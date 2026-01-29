@@ -53,12 +53,6 @@ static int msg_pause;
 static int floppy_status_on;
 static uint64_t msg_timeout;
 
-uint64_t gettime(void) {
-  struct timeval tv;
-  gettimeofday(&tv,NULL);
-  return tv.tv_sec*1000000 + tv.tv_usec;
-}
-
 static void disable_floppy_status() {
   if (floppy_status_on) {
     infomsg_pause(1);
@@ -95,7 +89,7 @@ static void hide(void) {
 static void show(void) {
   osd_show();
   msg_on = 1;
-  msg_timeout = 3000000+gettime();
+  msg_timeout = 3+time(NULL);
 }
 
 void infomsg_pause(int pause) {
@@ -109,7 +103,7 @@ void * thread_infomsg(void * arg) {
   int height = font_get_height(lv_font);
   while (thr_end==0) {
     usleep(50000);
-    if (msg_on && gettime()>=msg_timeout) {
+    if (msg_on && time(NULL)>=msg_timeout) {
       hide();
     }
     if (floppy_status_on) {
@@ -216,10 +210,10 @@ int jukebox_current_alphabetical_image=0;
 void * thread_jukebox(void * arg) {
   uint64_t jukebox_timeout = 0;
   while (thr_end == 0) {
-    uint64_t time = gettime();
+    uint64_t current_time = time(NULL);
     usleep(1000);
     if (msg_pause==0 && config.jukebox_enabled && config.jukebox_path /*&& !file_selector_running*/) {
-      if (time >= jukebox_timeout||jukebox_trigger_next_image)
+      if (current_time >= jukebox_timeout||jukebox_trigger_next_image)
       {
         jukebox_trigger_next_image=0;
         // Read directory
@@ -228,7 +222,7 @@ void * thread_jukebox(void * arg) {
         if (n<=0)
         {
           //infomsg_display("Error while reading jukebox directory. Jukebox off.");
-          jukebox_timeout = time + 1000000;
+          jukebox_timeout = current_time+1;
         } else {
           // Select image
           if (!random_for_disk_selection.state)
@@ -262,7 +256,7 @@ void * thread_jukebox(void * arg) {
           change_floppy(new_disk_image_name,0);
           //config.mem_size = selected_ram_size;
           cold_reset();
-          jukebox_timeout = (uint64_t)config.jukebox_timeout_duration*1000000U + gettime();
+          jukebox_timeout = (uint64_t)config.jukebox_timeout_duration + time(NULL);
           infomsg_display(new_disk_image_name);
         }
       }

@@ -164,6 +164,7 @@ static int settings(void) {
 }
 
 static int tools(void) {
+  int ret = 0;
   int quit = 0;
   int e_nextimage=0;
   char jukebox_timeout[8];
@@ -189,7 +190,6 @@ static int tools(void) {
       "UTC+1","UTC+2","UTC+3","UTC+4","UTC+5","UTC+6","UTC+7","UTC+8","UTC+9","UTC+10","UTC+11","UTC+12");
     lv_add_keymap_choice(lv);
 
-    int e_jbmode = lv_add_choice(lv,"Jukebox mode",&config.jukebox_enabled,2,"off","on");
     int e_timeout;
     int e_jbenabled = lv_add_choice(lv,"Jukebox active",&config.jukebox_enabled,2,"no","yes");
     if (config.jukebox_enabled) {
@@ -201,7 +201,7 @@ static int tools(void) {
     } else {
       e_timeout = -1;
     }
-    lv_entry_set_dynamic(lv,e_jbmode,1);
+    lv_entry_set_dynamic(lv,e_jbenabled,1);
 
     int e_config = lv_add_file(lv,"Config file",&config_file,0,filter_cfg);
     lv_entry_set_dynamic(lv,e_config,1);
@@ -240,8 +240,8 @@ static int tools(void) {
       }
     } else if (e==e_nextimage) {
       jukebox_trigger_next_image=1;
-      lv_delete(lv);
-      return 1;
+      ret=1;
+      quit=1;
     } else {
       if (config.jukebox_enabled) {
         int timeout = atoi(jukebox_timeout);
@@ -253,7 +253,7 @@ static int tools(void) {
   }
   free((void*)config_file);
 
-  return 0;
+  return ret;
 }
 
 static int hard_disks(void) {

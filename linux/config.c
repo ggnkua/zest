@@ -148,9 +148,6 @@ static int handler(void* user, const char* section, const char* name, const char
   } else if (MATCH("jukebox","enabled")) {
     if (value) pconfig->jukebox_enabled = truefalse(value);
   } else if (MATCH("jukebox","path")) {
-<<<<<<< HEAD
-    set_str_var(&pconfig->jukebox_path,value);
-=======
     if (value) pconfig->jukebox_path = strdup(value);
   } else if (MATCH("jukebox", "mode")) {
     int jm = atoi(value);
@@ -159,7 +156,6 @@ static int handler(void* user, const char* section, const char* name, const char
     } else {
       pconfig->jukebox_mode=jm;
     }
->>>>>>> d751159 (Added a jukebox mode that cycles all images alphanumerically)
   } else if (MATCH("jukebox","timeout")) {
     int t = atoi(value);
     if (t < 1)
